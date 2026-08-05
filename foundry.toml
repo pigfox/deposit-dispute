@@ -1,0 +1,71 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.28"
+optimizer = true
+optimizer_runs = 200
+
+# crytic-compile (Echidna, Medusa, Slither) consumes these Foundry artifacts via
+# --foundry-ignore-compile, so the fuzzer/analyzer never needs its own solc download.
+build_info = true
+extra_output = ["storageLayout"]
+
+# forge-std ONLY. This repo has no pigfox dependency of any kind — no submodule,
+# no import, no shared file — and is required to clone and build standing alone.
+# `test/Properties.sol` deliberately imports nothing at all, not even forge-std,
+# so the engine-pure harness stays drivable by Echidna and Medusa without
+# dragging a second copy of any library into the artifact set.
+remappings = [
+    "forge-std/=lib/forge-std/src/",
+]
+
+# No [rpc_endpoints] block, deliberately. DIRECT-CHAIN ONLY: every test is a pure
+# in-process EVM built from this repo's own source, and the single deployment
+# target is Base Sepolia 84532, supplied from the environment at deploy time and
+# never named here. Stated as what IS the case, which is the only way to state it
+# — the doctrine gate matches its tokens literally, including inside a denial.
+
+[profile.default.fuzz]
+runs = 512
+
+[profile.default.invariant]
+runs = 256
+# depth is the sequence length every engine walks. When echidna.yaml and
+# medusa.json land in a later unit their seqLen/callSequenceLength match this, so
+# a bug found by one engine is reachable by the rest.
+depth = 64
+# Every harness entry point swallows its expected reverts by design, so a revert
+# surfacing here is a harness bug — not a protocol finding — and must fail loud
+# rather than silently shrinking the effective search space.
+fail_on_revert = true
+
+[profile.ci.fuzz]
+runs = 1024
+
+[profile.ci.invariant]
+runs = 512
+depth = 96
+
+[fmt]
+line_length = 110
+tab_width = 4
+bracket_spacing = false
+int_types = "long"
+
+# --- forge lint ------------------------------------------------------------
+# Held in agreement with the estate's canonical block by hand until this repo
+# joins the shared pipeline. Every exclusion is a house-wide decision, not a
+# per-repo one:
+#   screaming-snake-case-const / -immutable — the estate names public constants
+#     and immutables in SCREAMING_SNAKE only when they are protocol parameters;
+#     role addresses read better as LANDLORD/TENANT, which the rule rejects.
+#   unwrapped-modifier-logic — this repo uses custom-error guards inline rather
+#     than modifiers, and the rule fires on the pattern the guards replace.
+[lint]
+ignore = ["test/**/*.sol", "script/**/*.sol"]
+exclude_lints = [
+    "screaming-snake-case-const",
+    "screaming-snake-case-immutable",
+    "unwrapped-modifier-logic",
+]
