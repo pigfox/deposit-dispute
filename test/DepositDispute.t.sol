@@ -683,8 +683,10 @@ contract DepositDisputeTest is DisputeTestBase {
     ///      this contract is the transfer inside `withdraw`, so a re-entry can only start in
     ///      a payee's fallback — and re-entering `withdraw` would meet a zeroed balance and
     ///      be refused by CEI before the guard was consulted. So the payee re-enters
-    ///      `settle`, which is guarded for exactly this reason, and CATCHES the revert so
-    ///      that the withdrawal still completes and the guard's own selector is observable.
+    ///      `settle`, which the guard also covers, and CATCHES the revert rather than
+    ///      bubbling it — left to bubble it would make the transfer fail and `withdraw`
+    ///      revert with `TransferFailed`, a different error about a different thing, and the
+    ///      test would pass while proving nothing about the guard.
     function test_withdraw_reentryIntoSettleIsRefusedByTheGuard() public {
         ReenteringParty attacker = new ReenteringParty();
         DepositDispute d = _deploy(address(attacker), tenant, DEPOSIT, _amounts());

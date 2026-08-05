@@ -30,7 +30,7 @@ contract RejectingReceiver {
 ///         external call is the transfer inside `withdraw`, so a re-entry can only originate
 ///         in a payee's fallback — and re-entering `withdraw` itself would find a zeroed
 ///         balance and be refused by CEI before the guard was consulted. So this re-enters
-///         `settle`, which is guarded for exactly this reason.
+///         `settle`, which the guard also covers.
 ///
 /// @dev    The revert is CAUGHT rather than bubbled. Left to bubble it would make the
 ///         transfer fail and `withdraw` revert with `TransferFailed`, which is a different

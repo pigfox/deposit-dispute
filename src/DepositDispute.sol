@@ -88,11 +88,31 @@ contract DepositDispute {
     }
 
     /// @notice One registered adjudicator.
+    /// @dev The hash lives HERE rather than in a parallel array beside this one. Two
+    ///      same-length arrays that must stay index-aligned are a class of bug waiting for
+    ///      an edit to one of them; a single record cannot fall out of step with itself.
     /// @param signer The address permitted to submit this adjudicator's verdicts.
+    /// @param modelIdHash keccak256 of `modelId`, which is what verdicts carry. Recorded by
+    ///        the contract, never supplied by a caller.
     /// @param modelId The pinned model identifier this slot speaks for.
     struct Adjudicator {
         address signer;
+        bytes32 modelIdHash;
         string modelId;
+    }
+
+    /// @notice Everything the contract knows about one line item's adjudication.
+    /// @dev ONE RECORD PER ITEM, not three parallel mappings keyed by the same index. The
+    ///      earlier shape kept `frozen`, `finding` and the tally in three separate mappings,
+    ///      which is three writes that have to agree and three places an edit can miss.
+    /// @param frozen Whether two adjudicators have agreed. One-way: never unset.
+    /// @param finding The finding they agreed on. Meaningless unless `frozen`.
+    /// @param tally Votes cast for each finding, indexed by {ItemFinding}. `uint64` because
+    ///        at most {ADJUDICATOR_COUNT} verdicts can ever be recorded against one item.
+    struct ItemState {
+        bool frozen;
+        ItemFinding finding;
+        uint64[2] tally;
     }
 
     /// @notice One submitted verdict, and everything a third party needs to re-run it.
@@ -345,13 +365,10 @@ contract DepositDispute {
 
     Item[ITEM_COUNT] private _schedule;
     Adjudicator[ADJUDICATOR_COUNT] private _adjudicators;
-    bytes32[ADJUDICATOR_COUNT] private _modelIdHashes;
     mapping(address signer => uint256 indexPlusOne) private _signerSlot;
 
     mapping(uint256 index => Verdict[] verdicts) private _verdicts;
-    mapping(uint256 index => mapping(ItemFinding finding => uint256 count)) private _tally;
-    mapping(uint256 index => bool frozen) private _itemFrozen;
-    mapping(uint256 index => ItemFinding finding) private _itemFinding;
+    mapping(uint256 index => ItemState state) private _itemState;
 
     uint256 private _reentrancyStatus;
 
@@ -359,12 +376,20 @@ contract DepositDispute {
                                 MODIFIERS
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev Guards the value-moving surface. {withdraw} is already safe by CEI alone — the
-    ///      balance is zeroed before the transfer — so this is defence in depth there. It is
-    ///      on {settle} for the same reason it is observable at all: the one way to reach a
-    ///      re-entry in this contract is a payee's fallback calling back in during a
-    ///      withdrawal, and a guard that only ever protected the function it re-entered
-    ///      through could never be shown to fire.
+    /// @dev Guards the whole value-moving surface: {settle}, which decides the split, and
+    ///      {withdraw}, which pays it out.
+    ///
+    ///      {withdraw} is already safe by CEI alone — the balance is zeroed and the running
+    ///      total decremented before the transfer — so the guard is defense in depth there.
+    ///
+    ///      {settle} MAKES NO EXTERNAL CALL TODAY, and the guard on it is defense in depth
+    ///      against a future edit that introduces one. That is a real risk rather than a
+    ///      hypothetical: {settle} is the natural place for a later requirement to land —
+    ///      notifying a registry, pulling a fee, paying an ERC-20 instead of ether — and any
+    ///      of those hands control to another contract in the middle of a function that has
+    ///      already computed a split and not yet written it. Adding the guard afterwards
+    ///      depends on whoever makes that edit noticing; having it there already does not.
+    ///      The cost is one warm storage slot per settlement, paid once per dispute.
     modifier nonReentrant() {
         if (_reentrancyStatus == ENTERED) revert ReentrantCall();
         _reentrancyStatus = ENTERED;
@@ -464,12 +489,11 @@ contract DepositDispute {
 
             bytes32 modelIdHash = keccak256(bytes(modelIds[i]));
             for (uint256 j = 0; j < i; j++) {
-                if (_modelIdHashes[j] == modelIdHash) revert DuplicateModelId(i);
+                if (_adjudicators[j].modelIdHash == modelIdHash) revert DuplicateModelId(i);
             }
 
             _signerSlot[signer] = i + 1;
-            _modelIdHashes[i] = modelIdHash;
-            _adjudicators[i] = Adjudicator({signer: signer, modelId: modelIds[i]});
+            _adjudicators[i] = Adjudicator({signer: signer, modelIdHash: modelIdHash, modelId: modelIds[i]});
 
             emit AdjudicatorRegistered(i, signer, modelIds[i], modelIdHash);
         }
@@ -563,7 +587,7 @@ contract DepositDispute {
 
         uint256 owed = 0;
         for (uint256 i = 0; i < ITEM_COUNT; i++) {
-            if (_itemFinding[i] == ItemFinding.Established) {
+            if (_itemState[i].finding == ItemFinding.Established) {
                 owed += _schedule[i].amountWei;
             }
         }
@@ -644,10 +668,11 @@ contract DepositDispute {
     {
         if (index >= ITEM_COUNT) revert UnknownItem(index);
 
-        frozen = _itemFrozen[index];
-        finding = _itemFinding[index];
+        ItemState storage s = _itemState[index];
+        frozen = s.frozen;
+        finding = s.finding;
         votes = _verdicts[index].length;
-        dissent = frozen ? votes - _tally[index][finding] : 0;
+        dissent = frozen ? votes - s.tally[uint256(finding)] : 0;
     }
 
     /// @notice The finding a frozen line item settled on.
@@ -655,8 +680,8 @@ contract DepositDispute {
     /// @return The finding.
     function findingOf(uint256 index) external view returns (ItemFinding) {
         if (index >= ITEM_COUNT) revert UnknownItem(index);
-        if (!_itemFrozen[index]) revert ItemNotAdjudicated(index);
-        return _itemFinding[index];
+        if (!_itemState[index].frozen) revert ItemNotAdjudicated(index);
+        return _itemState[index].finding;
     }
 
     /// @notice How many recorded verdicts chose `finding` for item `index`.
@@ -665,7 +690,7 @@ contract DepositDispute {
     /// @return The number of adjudicators that chose it.
     function agreementCount(uint256 index, ItemFinding finding) external view returns (uint256) {
         if (index >= ITEM_COUNT) revert UnknownItem(index);
-        return _tally[index][finding];
+        return _itemState[index].tally[uint256(finding)];
     }
 
     /// @notice How many verdicts have been recorded for one line item.
@@ -709,7 +734,7 @@ contract DepositDispute {
     /// @return The keccak256 hash of that slot's model identifier, as verdicts carry it.
     function modelIdHashAt(uint256 index) external view returns (bytes32) {
         if (index >= ADJUDICATOR_COUNT) revert UnknownAdjudicator(index);
-        return _modelIdHashes[index];
+        return _adjudicators[index].modelIdHash;
     }
 
     /// @notice Whether `account` is one of the three registered adjudicators.
@@ -763,8 +788,8 @@ contract DepositDispute {
     }
 
     /// @dev Writes the verdict and, if it is the one that reaches the threshold, freezes the
-    ///      item. The freeze is one-way: a later verdict finds `_itemFrozen` already set and
-    ///      is recorded as a dissent instead.
+    ///      item. The freeze is one-way: a later verdict finds `frozen` already set and is
+    ///      recorded as a dissent instead.
     function _recordVerdict(
         uint256 index,
         ItemFinding finding,
@@ -773,11 +798,12 @@ contract DepositDispute {
         bytes32 narrativeHash,
         string calldata reason
     ) private {
-        bytes32 modelIdHash = _modelIdHashes[_signerSlot[msg.sender] - 1];
+        bytes32 modelIdHash = _adjudicators[_signerSlot[msg.sender] - 1].modelIdHash;
 
+        ItemState storage s = _itemState[index];
         hasVoted[index][msg.sender] = true;
-        uint256 agreeing = _tally[index][finding] + 1;
-        _tally[index][finding] = agreeing;
+        uint64 agreeing = s.tally[uint256(finding)] + 1;
+        s.tally[uint256(finding)] = agreeing;
         _verdicts[index]
         .push(
             Verdict({
@@ -796,9 +822,9 @@ contract DepositDispute {
             index, msg.sender, finding, modelIdHash, promptHash, itemEvidenceHash, narrativeHash
         );
 
-        if (!_itemFrozen[index] && agreeing >= QUORUM) {
-            _itemFrozen[index] = true;
-            _itemFinding[index] = finding;
+        if (!s.frozen && agreeing >= QUORUM) {
+            s.frozen = true;
+            s.finding = finding;
             settledItemCount++;
             emit ItemAdjudicated(index, finding, agreeing);
         }

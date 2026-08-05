@@ -1,0 +1,57 @@
+name: CI
+
+# Everything here runs on a clean checkout with NO secrets. Build, test,
+# coverage, static analysis and property fuzzing need no keys — only deploying
+# does, and that is done by hand from a laptop, never here.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # PIGFOX SOLIDITY PIPELINE v1 — the estate's one verification standard, defined
+  # once in pigfox/solidity-pipeline and consumed here rather than copied. EVERY
+  # gate this repo runs comes from the submodule, verbatim. The only pipeline file
+  # that ever lived here was a stand-in for the shared property base, and it was
+  # deleted in the same commit that vendored the real one.
+  #
+  # The gate SCRIPTS come from lib/solidity-pipeline, vendored as a submodule at a
+  # commit this repo pins, so a local run and this run are the same bytes. That
+  # pin currently resolves to the same commit as the `@v1` ref below, so the
+  # orchestration and the gates it runs are one tree.
+  #
+  # https://github.com/pigfox/solidity-pipeline
+  pipeline:
+    uses: pigfox/solidity-pipeline/.github/workflows/solidity.yml@v1
+    with:
+      # test/Properties.sol declares seven echidna_* predicates and states the
+      # same number in pigfoxPropertyCount(). Both fuzzers assert they registered
+      # exactly this many, so a property that silently stops being picked up fails
+      # the job instead of reporting a smaller green run.
+      #
+      # Bump this, pigfoxPropertyCount(), InvariantsTest's own literal and the
+      # predicate together, in one commit.
+      expected-properties: 7
+
+      # NARROWED FROM THE `src test script` DEFAULT, and the reason is not a
+      # pre-existing violation: this repo has no script/ directory, because
+      # nothing is deployed yet. `forge fmt --check` tolerates the missing path
+      # today, but naming a directory that does not exist is a claim that would
+      # quietly become wrong the moment somebody created it with unformatted
+      # contents. Restore the default in the same commit that adds script/.
+      fmt-paths: src test
+
+      # No coverage exclusion. This repo holds no generated verifier and no other
+      # file the 100% gate cannot reach; every line, statement, branch and
+      # function in src/ answers to a test. A declared exclusion that matched no
+      # row would fail the gate anyway, which is the right behavior — a stale
+      # exclusion is a hole that reads as a decision.
+      coverage-exclusions: ''

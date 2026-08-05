@@ -17,9 +17,11 @@ number could be argued into any number.
 
 ## Status
 
-**Unit 1 — scaffold and contract skeleton.** The contract compiles, the full
-property set executes under Foundry, coverage on `src/` is 100% on all four
-dimensions, and Slither is clean at `fail-on: low` with no per-repo exclusion.
+**On PIGFOX SOLIDITY PIPELINE v1.** Every gate runs: the gate self-test, both
+linters, the doctrine gate, the static property count, formatting, build, tests
+and invariants, the 100% coverage gate, Slither at `fail-on: low`, Echidna and
+Medusa. Every gate comes from `lib/solidity-pipeline`, vendored at a commit this
+repo pins and consumed verbatim, so a local run and a CI run are the same bytes.
 
 Not yet done, and deliberately so:
 
@@ -27,32 +29,32 @@ Not yet done, and deliberately so:
 - **No off-chain adjudicator service.** The Go panel that calls the three models
   and submits their findings is a later unit. The `.golangci.yml` here is the
   estate's canonical config, waiting for it.
-- **This repo is not yet on the PIGFOX SOLIDITY PIPELINE.** See below — this is a
-  live obligation, not a nice-to-have.
 
-## What this repo does not depend on
+## What this repo depends on
 
-It clones and builds standing alone. There is no pigfox submodule, no pigfox
-import, and no file shared with another repo. The only `lib/` entry is
-`forge-std`, which `forge test` requires:
+Two submodules, and the distinction between them is the whole dependency policy:
+
+| | What it is | Why it is here |
+|---|---|---|
+| `lib/forge-std` | Foundry's test library | `forge test` needs it |
+| `lib/solidity-pipeline` | **Estate infrastructure** | The one verification standard, consumed rather than copied so a fix to a gate lands once instead of once per repo |
+
+**No demo repo.** This repo depends on `zk-escrow`, on
+`ai-parametric-insurance` and on every other demo repo exactly not at all — no
+submodule, no import, no shared file. The custody and evidence-commitment
+patterns here were *read* from those repos and written fresh.
 
 ```shell
 git clone --recursive <this repo>
 forge build
 ```
 
-The cost of that is real and is written down where it is paid:
-`test/PigfoxProperties.sol` is a **re-implementation** of the estate's shared
-property-harness base, not a copy that anyone will remember to reconcile. When
-this repo joins the shared pipeline that file is **deleted** and the import
-re-pointed — it is not merged, and it is not kept alongside.
-
-**Standing obligation.** PIGFOX SOLIDITY PIPELINE v1 binds every contract in
-every pigfox repo *before it is deployed or demoed*. This repo has not been
-deployed or demoed, so it is not yet in breach — but it must be consumed as a
-submodule (`lib/solidity-pipeline`, HTTPS, calling the reusable workflow) before
-anything here reaches a chain or a demo page. Echidna and Medusa configs, the
-static property-count gate and the doctrine gate all arrive with it.
+The pipeline is what supplies `pipeline/PigfoxProperties.sol`, the declaration
+base `test/Properties.sol` extends. This repo briefly carried its own
+re-implementation of that file while it was standing alone; that file was
+**deleted** when the pipeline was adopted rather than reconciled or kept
+alongside, because two copies of a contract whose entire job is to be a single
+source of truth is the failure it exists to prevent.
 
 ## Deployment target
 
@@ -267,19 +269,84 @@ asserted deterministically instead, which is the stronger check anyway.
 
 ---
 
+## What the fuzzing campaign under-samples
+
+Stated plainly because a verification claim without its limits is a stronger
+claim than the evidence supports.
+
+**The filed-but-unsettled phase is under-sampled.** Two of the harness's nine
+entry points — `settleWithAPartialSplit` and `settleAtTheCap` — open a dispute,
+file its evidence, adjudicate all five items and settle, all inside one call.
+That is what makes the two showpiece states reliably reachable, and it is also
+why the disputes those drivers create never *sit* in the state where a claim is
+filed but not yet settled. Only the slower `openDispute` → `fileClaim` path
+leaves one there.
+
+Two entry points need a dispute in exactly that phase, because they are the ones
+that attack it: `submitVerdictForWrongItem`, which offers one line item's
+evidence against another, and `voteTwice`, which tries to spend an adjudicator's
+vote a second time. So those two attacks are attempted less often than the rest
+of the harness runs.
+
+**How that was found, and what was done about it.** It was measured, not
+assumed. `test_aRandomSequenceReachesBothShowpieceStates` walks four independent
+pseudo-random sequences over the same nine entry points the fuzzer draws from,
+and its first run turned up a sequence that attacked the evidence binding zero
+times. The gate was moved to the aggregate across sequences, and the per-sequence
+figures are logged so the distribution is visible rather than reduced to a
+pass/fail.
+
+**What is not weakened.** Both attack paths are additionally driven
+*deterministically*, one per dedicated test —
+`test_crossItemEvidenceIsOfferedAndRefused` offers three cross-item verdicts and
+asserts all three were refused and none recorded;
+`test_aSecondVoteIsOfferedAndRefused` does the same for duplicate votes. A
+deterministic assertion is a stronger check than any frequency claim, so the
+properties themselves are not resting on how often the campaign happens to reach
+the state. What the campaign contributes for these two properties is
+corroboration, not the proof.
+
+The honest fix — a driver that leaves a dispute parked in the filed phase — is
+open work, not a decision to leave it as is.
+
+---
+
 ## Running it
 
+Every gate, in pipeline order. These are the same scripts CI runs, taken from the
+same submodule commit:
+
 ```shell
+lib/solidity-pipeline/scripts/selftest.sh
+lib/solidity-pipeline/scripts/lint-config-check.sh all
+forge lint
+npx --yes solhint@6.2.3 -c lib/solidity-pipeline/.solhint.json --max-warnings 0 'src/**/*.sol'
+lib/solidity-pipeline/scripts/no-chain-copy-gate.sh all
+lib/solidity-pipeline/scripts/property-count.sh --source test/Properties.sol --expected 7
+forge fmt --check src test
 forge build --sizes
-forge fmt --check
 forge test
-forge coverage --no-match-coverage '(test|script)/' --no-match-test 'invariant_'
-slither . --config-file slither.config.json
+lib/solidity-pipeline/scripts/coverage.sh
+slither . --config-file lib/solidity-pipeline/slither.config.json --ignore-compile
+```
+
+Both fuzzers, which need artifacts from a **forced** build — `forge coverage`
+overwrites `out/` with instrumented artifacts that crytic-compile will consume
+without complaint, registering fewer properties than the source has:
+
+```shell
+rm -rf crytic-export && forge build --force
+echidna . --contract Properties --config echidna.yaml | tee echidna-output.txt
+lib/solidity-pipeline/scripts/property-count.sh --engine echidna --output echidna-output.txt --expected 7
+
+rm -rf crytic-export && forge build --force
+medusa fuzz --config medusa.json 2>&1 | tee medusa-output.txt
+lib/solidity-pipeline/scripts/property-count.sh --engine medusa --output medusa-output.txt --expected 7
 ```
 
 `forge test -vv --match-test test_aRandomSequenceReachesBothShowpieceStates`
 prints how often pseudo-random sequences reach each showpiece state.
 
-## Licence
+## License
 
 MIT. Copyright (c) 2026 Pigfox LLC.

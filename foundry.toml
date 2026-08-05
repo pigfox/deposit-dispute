@@ -11,13 +11,23 @@ optimizer_runs = 200
 build_info = true
 extra_output = ["storageLayout"]
 
-# forge-std ONLY. This repo has no pigfox dependency of any kind — no submodule,
-# no import, no shared file — and is required to clone and build standing alone.
-# `test/Properties.sol` deliberately imports nothing at all, not even forge-std,
-# so the engine-pure harness stays drivable by Echidna and Medusa without
-# dragging a second copy of any library into the artifact set.
+# Two submodules, and the distinction between them is the whole dependency policy
+# of this repo. forge-std is the test library. solidity-pipeline is ESTATE
+# INFRASTRUCTURE, consumed rather than copied so a fix to a gate lands once
+# instead of once per repo. Neither is a demo repo, and this repo depends on no
+# demo repo — not zk-escrow, not ai-parametric-insurance, not any other. The
+# patterns re-implemented here were READ from those repos and written fresh.
+#
+# `test/Properties.sol` imports the shared property base from the pipeline and
+# nothing else — no forge-std — so the engine-pure harness stays drivable by
+# Echidna and Medusa without dragging a second copy of any library into the
+# artifact set that crytic-compile reads.
 remappings = [
     "forge-std/=lib/forge-std/src/",
+    # PIGFOX SOLIDITY PIPELINE v1, vendored as a submodule. The shared property
+    # base lives here; the gate scripts alongside it are what CI runs, so a local
+    # run and a CI run are the same bytes.
+    "pipeline/=lib/solidity-pipeline/src/",
 ]
 
 # No [rpc_endpoints] block, deliberately. DIRECT-CHAIN ONLY: every test is a pure
@@ -54,14 +64,14 @@ bracket_spacing = false
 int_types = "long"
 
 # --- forge lint ------------------------------------------------------------
-# Held in agreement with the estate's canonical block by hand until this repo
-# joins the shared pipeline. Every exclusion is a house-wide decision, not a
-# per-repo one:
-#   screaming-snake-case-const / -immutable — the estate names public constants
-#     and immutables in SCREAMING_SNAKE only when they are protocol parameters;
-#     role addresses read better as LANDLORD/TENANT, which the rule rejects.
-#   unwrapped-modifier-logic — this repo uses custom-error guards inline rather
-#     than modifiers, and the rule fires on the pattern the guards replace.
+# CANONICAL BLOCK. Copied verbatim from lib/solidity-pipeline/config/lint.toml
+# and held in agreement with it by scripts/lint-config-check.sh, which CI runs.
+# `forge lint` has no --config-file, so unlike Slither and Solhint this cannot be
+# consumed from the submodule; it is the same deliberate copy as echidna.yaml and
+# medusa.json, with the same check keeping the copies honest.
+# Every exclusion's reasoning is in lib/solidity-pipeline/docs/forge-lint-rules.md.
+# This repo adds NOTHING to either list — it holds no generated verifier, which is
+# the one documented addition the checker permits.
 [lint]
 ignore = ["test/**/*.sol", "script/**/*.sol"]
 exclude_lints = [

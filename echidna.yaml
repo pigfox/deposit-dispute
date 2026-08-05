@@ -1,0 +1,59 @@
+# Echidna configuration — PIGFOX SOLIDITY PIPELINE v1.
+#
+# Derived from lib/solidity-pipeline/config/echidna.yaml. Only the values under
+# "tune per repo" differ; everything below REQUIRED is the estate-wide setting,
+# and lib/solidity-pipeline/scripts/property-count.sh is what notices when a run
+# stops meaning it. It is a copy rather than a consumed file because Echidna
+# resolves corpusDir relative to the working directory, so a shared config living
+# under lib/ would scatter corpora into the submodule.
+#
+# Run:  echidna . --contract Properties --config echidna.yaml
+#
+# WARNING: artifacts must come from a fresh `forge build`. `forge coverage`
+# overwrites out/ with instrumented artifacts that crytic-compile consumes
+# without complaint, silently registering fewer properties than the source has.
+# Always `rm -rf crytic-export && forge build --force` first.
+
+# --- tune per repo ---------------------------------------------------------
+
+# THIS HARNESS MOVES REAL VALUE and therefore needs a balance to construct. Every
+# dispute is funded at construction out of the harness's own balance — the deposit
+# IS the constructor's `msg.value` — so a zero balance would leave the harness
+# unable to open a single dispute. Conservation, the cap and solvency would then
+# all hold vacuously over a system in which nothing had ever happened. 1000 ether
+# against deposits of at most a little over one ether leaves a 64-call sequence
+# unable to run dry.
+balanceContract: 1000000000000000000000
+
+# Only the harness is a target. Every party and every adjudicator is an Actor
+# contract the harness calls through, and the disputes themselves are deployed by
+# the harness at addresses Echidna's sender set has no business holding a role at;
+# letting the fuzzer reach a DepositDispute directly would just bounce off
+# NotLandlord and NotAdjudicator forever.
+allContracts: false
+
+corpusDir: echidna-corpus
+
+# --- REQUIRED — do not diverge ---------------------------------------------
+
+# Assert against the boolean echidna_* predicates rather than Solidity asserts.
+testMode: property
+
+testLimit: 100000
+
+# seqLen MUST match foundry.toml's invariant depth, so all three engines walk
+# sequences of the same length and a bug found by one is reachable by the rest.
+seqLen: 64
+
+shrinkLimit: 5000
+
+# Deterministic runs, so a CI failure is reproducible locally.
+seed: 20260805
+
+# Fail loudly rather than reporting a pass when the harness cannot be deployed.
+stopOnFail: true
+
+# Reuse the artifacts `forge build` already produced. Without this,
+# crytic-compile tries to download its own solc, which needs network access and a
+# GitHub API budget CI should not depend on.
+cryticArgs: ["--foundry-ignore-compile"]

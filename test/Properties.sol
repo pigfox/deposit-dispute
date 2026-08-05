@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {PigfoxProperties} from "./PigfoxProperties.sol";
+import {PigfoxProperties} from "pipeline/PigfoxProperties.sol";
 
 import {DepositDispute} from "../src/DepositDispute.sol";
 import {Actor} from "./Actor.sol";
@@ -16,6 +16,14 @@ import {MerkleBuilder} from "./MerkleBuilder.sol";
 /// @dev    ENGINE-PURE. No forge-std, no cheatcodes, no `vm`. A harness that reached for a
 ///         cheatcode would work under Foundry and be undrivable by the fuzzers, and the
 ///         whole value of one property file is that the same predicates answer to all three.
+///
+/// @dev    THE BASE IS CONSUMED, NOT COPIED. {PigfoxProperties} comes from
+///         lib/solidity-pipeline, vendored as a submodule at a commit this repo pins, so the
+///         declaration contract cannot drift from the gate scripts that read it. This repo
+///         briefly carried its own re-implementation of that file; it was DELETED when the
+///         pipeline was adopted rather than reconciled, because two copies of a contract
+///         whose entire job is to be a single source of truth is the failure it exists to
+///         prevent.
 ///
 /// @dev    WHY THERE ARE ACTOR CONTRACTS. `fileClaim` accepts only the landlord,
 ///         `submitVerdict` only a registered adjudicator, and `withdraw` pays only whoever
