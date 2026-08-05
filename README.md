@@ -412,6 +412,46 @@ value is `NotEstablished` and two agreeing findings are needed to establish
 anything, **a refusal can only ever make it harder to take money from the
 tenant**.
 
+### What the vendors actually did when asked
+
+Observed **5 August 2026**, by probing all three configured slots with one
+minimal call each. This is what happened on that day, to those three models. It
+is not a claim about vendors in general, about other models, or about any other
+date — three models on one afternoon is not a survey.
+
+| Slot | Requested | Vendor answered as | Temperature field |
+|---|---|---|---|
+| 0 | `claude-opus-5` | `claude-opus-5` — **exactly** | **HTTP 400**, rejected: `` `temperature` is deprecated for this model.`` |
+| 1 | `gpt-5.4` | `gpt-5.4-2026-03-05` — **a dated snapshot** | accepted |
+| 2 | `claude-sonnet-5` | `claude-sonnet-5` — **exactly** | **HTTP 400**, rejected: `` `temperature` is deprecated for this model.`` |
+
+Two things came out of that, and neither was assumed in advance — both were found
+by asking.
+
+**An identifier asymmetry.** Both Anthropic identifiers came back exactly as
+requested. The OpenAI one was an alias that resolved to a dated snapshot. That
+matters here more than it usually would, because the identifier is not a
+configuration detail: `keccak256` of it is stored in the contract's constructor
+and published beside every verdict. **An alias makes that hash a pointer to a
+moving target** — a third party re-running the adjudication next month would get
+whatever the alias points to then, while the chain still names the alias, and
+nothing would reveal the difference. Since reproducibility by a third party is
+the whole claim, slot 1 is pinned to `gpt-5.4-2026-03-05`. The accepted cost is
+that a snapshot rotation means a redeployment. Re-probed after pinning: the
+snapshot resolves to itself, so it is not an alias in turn.
+
+**Two of the three models reject `temperature` outright.** Not ignore it —
+reject it, with an HTTP 400 and no completion. A request carrying a parameter the
+model refuses does not run at a different temperature; it does not run. This is
+why whether the field is *sent* is per-slot configuration while its *value* is
+not configurable anywhere: the value is zero and always has been, and what varies
+is a fact about a vendor's API. With the field omitted for the two Anthropic
+slots, all three answer 200.
+
+The probe that found this is `adjudicator/probe_live_test.go`, build-tagged
+`live` so it never runs in CI or under the coverage gate. It is the only test in
+the repository that spends money.
+
 ### The two halves are pinned to each other
 
 The Go side builds the merkle tree by laying out rows; the contract folds a

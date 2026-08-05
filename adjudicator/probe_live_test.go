@@ -26,6 +26,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -43,6 +44,9 @@ const (
 	probeSystem = "Reply with exactly one word."
 	probeUser   = "Reply with the single word: OK"
 )
+
+// envProbeSlot narrows the probe to a single slot index.
+const envProbeSlot = "DD_PROBE_SLOT"
 
 // probePlaceholderDispute stands in for the one value config.Load requires that
 // a reachability probe genuinely cannot have.
@@ -70,9 +74,25 @@ func TestLiveSlotsAreReachable(t *testing.T) {
 		t.Fatalf("config: %v", err)
 	}
 
+	// EnvProbeSlot narrows the probe to one slot, so re-checking a single
+	// identifier after a change costs one metered call rather than three. Absent,
+	// every slot is probed.
+	only := -1
+	if raw := os.Getenv(envProbeSlot); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 || n >= config.SlotCount {
+			t.Fatalf("%s=%q is not a slot index below %d", envProbeSlot, raw, config.SlotCount)
+		}
+		only = n
+		t.Logf("probing slot %d only (%s is set)", only, envProbeSlot)
+	}
+
 	doer := &http.Client{Timeout: probeTimeout}
 
 	for slot, slotCfg := range cfg.Slots {
+		if only >= 0 && slot != only {
+			continue
+		}
 		client, err := model.New(slotCfg, doer)
 		if err != nil {
 			t.Fatalf("slot %d: %v", slot, err)
