@@ -1,0 +1,30 @@
+{
+  "dispute": "0x0000000000000000000000000000000000000000",
+  "items": [
+    {
+      "description": "Carpet, main bedroom: staining beyond fair wear and tear",
+      "amountWei": "100000000000000000",
+      "evidence": "Check-in inventory dated 2025-03-01 records the carpet as clean with no marks. Check-out inventory dated 2026-02-28 records three dark stains, each roughly 20cm across, in the centre of the room. Photographs from both inspections are included in the bundle. A cleaning company quotation dated 2026-03-02 states the staining did not lift under commercial extraction. The tenancy ran for twelve months."
+    },
+    {
+      "description": "Wall, living room: unfilled fixings",
+      "amountWei": "200000000000000000",
+      "evidence": "Check-out photographs show eleven screw holes in the chimney breast, unfilled. The tenancy agreement clause 14 permits the tenant to hang pictures provided holes are made good on departure. No filling or redecoration was carried out. A decorator's quotation for filling and spot-painting the wall is included."
+    },
+    {
+      "description": "Window, second bedroom: cracked pane",
+      "amountWei": "300000000000000000",
+      "evidence": "Check-out inspection records a crack running the full height of the inner pane. The check-in inventory records the windows as 'in good order' without photographs. The tenant states in writing that the crack was present at check-in and was reported by telephone in April 2025. No written record of that report is in the bundle, and the landlord states no report was received."
+    },
+    {
+      "description": "Front door lock: replacement",
+      "amountWei": "400000000000000000",
+      "evidence": "A locksmith invoice dated 2026-03-05 for replacing the front door cylinder is included. The stated reason on the invoice is 'keys not returned'. The check-out report records two of the three issued keys returned. The tenancy agreement clause 9 makes the tenant responsible for the cost of replacing locks where keys are not returned."
+    },
+    {
+      "description": "End-of-tenancy cleaning",
+      "amountWei": "900000000000000000",
+      "evidence": "The check-out report records the oven, extractor hood and bathroom as requiring cleaning, with photographs. A cleaning invoice dated 2026-03-03 for a full property clean is included, at a cost covering the whole flat rather than the three areas named. The tenancy agreement contains no professional-cleaning clause."
+    }
+  ]
+}

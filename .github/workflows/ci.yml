@@ -55,3 +55,70 @@ jobs:
       # row would fail the gate anyway, which is the right behavior — a stale
       # exclusion is a hole that reads as a decision.
       coverage-exclusions: ''
+
+  # The off-chain adjudicator panel. Separate from the Solidity pipeline because
+  # it gates different things — Go formatting, vet, lint, tests and 100%
+  # coverage — against the same contract.
+  #
+  # NO VENDOR KEY IS NEEDED OR ACCEPTED. Every test substitutes the model seam
+  # and the chain seam, so the suite makes no vendor call, reaches no node, and
+  # spends nothing. A job that needed a key to go green would be a job only the
+  # key holder could run, and everyone else would be reading a skipped stage as a
+  # passing one.
+  adjudicator:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: adjudicator
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-go@v5.1.0
+        with:
+          go-version-file: adjudicator/go.mod
+          cache-dependency-path: adjudicator/go.sum
+
+      # Formatting first because it is cheapest: a style regression fails in
+      # seconds instead of after the whole suite has run. `gofmt -l` prints
+      # offending files and nothing else, so empty output is the pass condition.
+      - name: gofmt
+        run: |
+          set -euo pipefail
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+          echo "  ok   gofmt: clean"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.12.2
+          working-directory: adjudicator
+          args: --timeout=5m
+
+      # -race and -shuffle=on: the panel walks its slots in order today, and both
+      # flags are here so that stops being true loudly rather than silently.
+      - name: go test
+        run: go test ./... -race -shuffle=on -count=1 -timeout 10m
+
+      # 100% ON EVERY PACKAGE, not on the weighted average. An average lets a
+      # large well-tested package carry a small untested one, which is exactly
+      # the shape a missed error path makes.
+      - name: coverage gate
+        run: |
+          set -euo pipefail
+          go test ./... -covermode=set -coverprofile=coverage.out
+          go tool cover -func=coverage.out | tail -1
+          if go tool cover -func=coverage.out | grep -v '100.0%'; then
+            echo "::error::the lines above are below 100% coverage"
+            exit 1
+          fi
+          echo "  ok   coverage: 100% of statements"

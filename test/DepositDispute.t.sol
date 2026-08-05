@@ -491,6 +491,59 @@ contract DepositDisputeTest is DisputeTestBase {
         }
     }
 
+    /// @dev THE CROSS-LANGUAGE PIN. The off-chain adjudicator builds this tree in Go: it
+    ///      lays the rows out and reads siblings off them, where this contract only folds a
+    ///      proof. Two different algorithms over one shape, in two languages, and nothing
+    ///      but a shared literal holds them together — so here is the shared literal.
+    ///
+    ///      The same five strings and the same expected root appear in
+    ///      adjudicator/internal/evidence/evidence_test.go. If these two ever disagree the
+    ///      agent builds proofs this contract refuses, and the first symptom would otherwise
+    ///      be a reverted transaction on a live dispute rather than a red test.
+    function test_theMerkleRootPinMatchesTheGoAgent() public pure {
+        bytes32[ITEM_COUNT] memory ev;
+        ev[0] = keccak256("deposit-dispute:pin:item0");
+        ev[1] = keccak256("deposit-dispute:pin:item1");
+        ev[2] = keccak256("deposit-dispute:pin:item2");
+        ev[3] = keccak256("deposit-dispute:pin:item3");
+        ev[4] = keccak256("deposit-dispute:pin:item4");
+
+        assertEq(
+            MerkleBuilder.rootOf(ev),
+            bytes32(0x93f43ae0bfa8187d6b710fd892e12ed6c8bc663d4473bea5ee4fa5872a4e3113),
+            "the Solidity tree and the Go agent's tree have diverged"
+        );
+    }
+
+    /// @dev The other half of the pin: the contract must ACCEPT a proof built over that
+    ///      fixture, at every index. A matching root with an unusable proof would be a pin
+    ///      that agreed on the wrong thing.
+    function test_theCrossLanguagePinFixtureIsAdjudicable() public {
+        bytes32[ITEM_COUNT] memory ev;
+        ev[0] = keccak256("deposit-dispute:pin:item0");
+        ev[1] = keccak256("deposit-dispute:pin:item1");
+        ev[2] = keccak256("deposit-dispute:pin:item2");
+        ev[3] = keccak256("deposit-dispute:pin:item3");
+        ev[4] = keccak256("deposit-dispute:pin:item4");
+
+        vm.prank(landlord);
+        dispute.fileClaim(MerkleBuilder.rootOf(ev));
+
+        for (uint256 i = 0; i < ITEM_COUNT; i++) {
+            vm.prank(adjAlpha);
+            dispute.submitVerdict(
+                i,
+                DepositDispute.ItemFinding.Established,
+                ev[i],
+                MerkleBuilder.proofFor(ev, i),
+                PROMPT_HASH,
+                NARRATIVE_HASH,
+                REASON
+            );
+        }
+        assertEq(dispute.verdictCount(ITEM_CLEANING), 1, "the promoted item accepted its proof too");
+    }
+
     function test_leafFor_bindsTheIndexIntoTheHash() public view {
         bytes32 evidence = keccak256("one bundle");
         assertTrue(

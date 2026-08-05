@@ -23,12 +23,14 @@ and invariants, the 100% coverage gate, Slither at `fail-on: low`, Echidna and
 Medusa. Every gate comes from `lib/solidity-pipeline`, vendored at a commit this
 repo pins and consumed verbatim, so a local run and a CI run are the same bytes.
 
+The off-chain panel lives in `adjudicator/` — Go, 100% covered on every package,
+`golangci-lint` clean, and it makes no vendor call and reaches no node in test.
+
 Not yet done, and deliberately so:
 
-- **Nothing is deployed.** No address, no `deployments/` file, no broadcast.
-- **No off-chain adjudicator service.** The Go panel that calls the three models
-  and submits their findings is a later unit. The `.golangci.yml` here is the
-  estate's canonical config, waiting for it.
+- **Nothing is deployed.** No address, no `deployments/` file, no broadcast. The
+  adjudicator renders the `cast send` argument list for every verdict and sends
+  none of them.
 
 ## What this repo depends on
 
@@ -269,6 +271,87 @@ asserted deterministically instead, which is the stronger check anyway.
 
 ---
 
+## The adjudicator
+
+`adjudicator/` is the off-chain panel: it checks the published evidence bundle
+against the claim's on-chain commitment, verifies that the three configured
+models are the ones the contract was constructed with, and asks each of them
+whether the landlord established each deduction.
+
+**It signs nothing and broadcasts nothing.** Every verdict is rendered as the
+argument list that would submit it. That is the mode a third party follows to
+re-run an adjudication and check the published hashes, and it needs no private
+key because the program holds none.
+
+### One item is one call
+
+Five items and three slots are **fifteen separate round trips**. Items are never
+batched, and that is the design rather than an implementation detail waiting to
+be optimized away:
+
+- A batched call lets one item's evidence colour the answer to another. The model
+  would see the landlord's whole case at once, and a claim that looked strong in
+  aggregate would drag a weak item along with it.
+- The contract adjudicates per item and freezes each one on its own 2-of-3. A
+  batch would produce five findings that were never five independent decisions,
+  while presenting them as if they were.
+- The merkle commitment is per item, so a batched prompt would answer to evidence
+  from several leaves at once and the `promptHash` published beside each verdict
+  would no longer identify the question that verdict answered.
+
+`TestOneItemIsExactlyOneCallPerSlot` asserts the call count, and
+`TestEachCallCarriesOnlyItsOwnItem` asserts that no slot ever saw another item's
+evidence.
+
+### The slots
+
+Three, pinned by environment, positionally matching the contract's. **At least
+two vendors**, refused at load time if not: the contract enforces distinct model
+*identifiers* but has no idea which company serves them, and three distinct
+models from one vendor share a tokenizer, a safety layer, a serving stack and an
+outage — a correlation a 2-of-3 threshold silently assumes away.
+
+Before any model is called, `internal/chain` reads `modelIdHashAt` back off chain
+and compares it against `keccak256` of the configured identifier. **A mismatch
+stops the program.** An adjudicator running a model the contract did not register
+would publish verdicts under a slot claiming a different model than the one that
+answered, and the published `modelIdHash` would be a lie a third party could not
+detect — they would re-run the model the chain named. The chain id is checked the
+same way: DIRECT-CHAIN ONLY, verified rather than assumed.
+
+### A pinned model identifier does not pin model behavior
+
+The same identifier can start fencing its replies, start prefacing them, or start
+returning a near-miss token, with no version change and no notice. Each of these
+is handled explicitly and each has a test:
+
+| What the model does | What happens |
+|---|---|
+| Wraps the payload in a code fence | **Stripped** — a fence is transport, and only when the *entire* reply is one fence pair |
+| Puts prose before the payload | **Refused**, by name. No JSON is hunted for inside prose |
+| Answers `PROBABLY`, `yes`, `ESTABLISHED (on balance)` | **Refused**. A near-miss is not evidence of intent |
+| Rejects the `temperature` field | The field is **absent from the wire**, not zero — per slot, from environment |
+| Answers as a different snapshot than requested | Both identifiers are **logged side by side** |
+
+**A refusal is a refusal, not a guess.** Nothing retries with a looser parser,
+asks the model to try again, or infers a finding from what the reply seemed to
+lean towards. The slot abstains and says why, and because the contract's zero
+value is `NotEstablished` and two agreeing findings are needed to establish
+anything, **a refusal can only ever make it harder to take money from the
+tenant**.
+
+### The two halves are pinned to each other
+
+The Go side builds the merkle tree by laying out rows; the contract folds a
+proof. Two different algorithms over one shape, in two languages. A single shared
+literal holds them together — the same five strings and the same expected root
+appear in `adjudicator/internal/evidence/evidence_test.go` and in
+`test/DepositDispute.t.sol`. If they ever disagree the agent would build proofs
+the contract refuses, and the first symptom would otherwise be a reverted
+transaction on a live dispute.
+
+---
+
 ## What the fuzzing campaign under-samples
 
 Stated plainly because a verification claim without its limits is a stronger
@@ -346,6 +429,36 @@ lib/solidity-pipeline/scripts/property-count.sh --engine medusa --output medusa-
 
 `forge test -vv --match-test test_aRandomSequenceReachesBothShowpieceStates`
 prints how often pseudo-random sequences reach each showpiece state.
+
+The adjudicator, from `adjudicator/`:
+
+```shell
+gofmt -l .
+go vet ./...
+golangci-lint run --timeout=5m
+go test ./... -race -shuffle=on -count=1
+go test ./... -covermode=set -coverprofile=coverage.out
+go tool cover -func=coverage.out
+```
+
+No key is needed for any of that. Every test substitutes the model seam and the
+chain seam, so the suite makes no vendor call, reaches no node, and spends
+nothing.
+
+## A note on the address-checksum gate
+
+The pipeline's EIP-55 gate refuses a scan set of zero addresses, because that is
+the shape a broken matcher makes and it is indistinguishable from a clean tree.
+Through Unit 2 this repository pinned no addresses at all — nothing was deployed
+— so the stage could not pass, and it was **left red as a stated decision**
+rather than silenced with `--allow-empty` plumbing or a decorative address
+pinned to satisfy it.
+
+It passes now, and not because anything was done to make it pass: the
+adjudicator's test fixtures carry addresses, so the gate has a real scan set to
+check. The address it checks most is `0xDD00…00DD0`, which is deliberately
+synthetic — this repository still has no deployment, and the first real address
+lands with one.
 
 ## License
 
