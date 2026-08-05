@@ -26,11 +26,17 @@ repo pins and consumed verbatim, so a local run and a CI run are the same bytes.
 The off-chain panel lives in `adjudicator/` — Go, 100% covered on every package,
 `golangci-lint` clean, and it makes no vendor call and reaches no node in test.
 
-Not yet done, and deliberately so:
+Not yet done:
 
 - **Nothing is deployed.** No address, no `deployments/` file, no broadcast. The
+  deploy script and the two seeded schedules are written and gated; the
+  deployment itself is waiting on credentials — see **Deployment** below. The
   adjudicator renders the `cast send` argument list for every verdict and sends
   none of them.
+- **No live model run has happened**, so this repository makes no claim about how
+  the three vendors actually behave. The drift-handling in
+  `internal/model` is written from the estate's documented experience elsewhere,
+  not from anything observed here.
 
 ## What this repo depends on
 
@@ -268,6 +274,72 @@ nothing was ever tried.
 `afterInvariant` asserts only what a single sequence reaches with effective
 certainty — a dispute was opened, a claim was filed. Everything probabilistic is
 asserted deterministically instead, which is the stronger check anyway.
+
+---
+
+## Deployment
+
+**Nothing is deployed yet.** This section describes what will be, and the exact
+sequence that does it. No address in this repository is a deployed address.
+
+DIRECT-CHAIN ONLY: Base Sepolia 84532, and nothing else. `foundry.toml` names no
+endpoint, the deploy script has no local-node path and no rehearsal mode, and the
+adjudicator reads the chain id back and refuses to run against any other chain.
+
+### Two disputes, because one cannot show both states
+
+A dispute settles exactly once, so it demonstrates a partial split **or** the cap,
+never both. `script/Deploy.s.sol` therefore deploys a pair:
+
+| | Deposit | Schedule | Why |
+|---|---|---|---|
+| **A — the split** | 0.002 ether | five items summing to 0.0019 | The claim cannot reach the deposit even if every item is established, so **both parties are credited** whatever the panel decides — provided it establishes at least one item |
+| **B — the cap** | 0.0002 ether | five items of 0.0003 each | **Any single** established item already puts the claim over the deposit, so the landlord is capped and the excess is recorded as no debt anywhere |
+
+The one outcome that is not a split is the panel establishing nothing at all in
+dispute A. That is a real possible answer, and it would be reported as one. The
+run will not be repeated until it produces a nicer result.
+
+The evidence bundles are chosen to match: `adjudicator/evidence/example.json`
+mixes well-evidenced deductions with weak and contested ones, and
+`cap-example.json` is a badly damaged property where the claims are strong.
+`TestTheDeployedScheduleMatchesThePublishedBundles` holds the deploy script's
+description literals and the bundles' descriptions together — if they diverged,
+the panel would be answering about a deduction the chain does not describe, and
+**nothing on chain could detect it**, because the contract commits to the
+description it was given rather than the one the model saw.
+
+### What a deployment needs
+
+Everything comes from `.env` (copy `.env.example`), and nothing in it is ever
+committed, echoed or logged — `./scripts/with-env.sh 'CMD'` is the only wrapper
+that reads it.
+
+- `RPC_URL` — a Base Sepolia endpoint, shared by `forge` and the adjudicator so
+  there is one endpoint rather than two variables that drift.
+- `DEMO_DEPLOYER_PK` — funded with **0.0022 ether plus gas**. A DepositDispute
+  takes custody at construction and has no later funding path, so the deposits
+  leave the deployer in the deployment transaction itself.
+- `DD_LANDLORD_ADDR` / `DD_TENANT_ADDR` and a key for each — the landlord files
+  the claim, and both parties withdraw.
+- Three `DD_SLOT{n}_SIGNER_ADDR` and keys — only a registered signer may submit
+  that slot's verdicts.
+- Three `DD_SLOT{n}_MODEL_ID` — the contract stores `keccak256` of each, and the
+  adjudicator refuses to run if what it is configured with does not match.
+- `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` — the run is **fifteen metered calls**,
+  five items by three slots.
+- `ETHERSCAN_API_KEY` — for Basescan verification.
+
+### The sequence
+
+```shell
+./scripts/with-env.sh 'forge script script/Deploy.s.sol:Deploy \
+    --rpc-url "$RPC_URL" --private-key "$DEMO_DEPLOYER_PK" --broadcast --verify'
+```
+
+Then, per dispute: the landlord files the bundle root, the adjudicator is pointed
+at the address and renders fifteen verdicts, each verdict is submitted by its own
+slot signer, anyone settles, and both parties withdraw.
 
 ---
 

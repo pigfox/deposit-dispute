@@ -101,7 +101,9 @@ const (
 // configuration and no defaults for anything that identifies a model or a
 // contract.
 const (
-	EnvRPCURL         = "DD_RPC_URL"
+	// EnvRPCURL is the Base Sepolia endpoint, shared with `forge` rather than
+	// duplicated. Two variables naming one endpoint is two things that can drift.
+	EnvRPCURL         = "RPC_URL"
 	EnvDisputeAddress = "DD_DISPUTE_ADDRESS"
 	EnvAnthropicKey   = "ANTHROPIC_API_KEY"
 	EnvOpenAIKey      = "OPENAI_API_KEY"

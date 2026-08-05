@@ -1,0 +1,30 @@
+{
+  "dispute": "0xDD00000000000000000000000000000000000DD0",
+  "items": [
+    {
+      "description": "Kitchen: fire damage to units and worktop",
+      "amountWei": "300000000000000",
+      "evidence": "Fire and Rescue Service report dated 2026-01-18 records a kitchen fire attended at the property, cause recorded as an unattended pan. Check-in inventory dated 2025-03-01 records the kitchen units and worktop as new. Check-out photographs show four base units and the full run of worktop charred through. A fitter's invoice dated 2026-02-10 for replacement of the affected units and worktop is included. The tenant does not dispute that the fire occurred during the tenancy."
+    },
+    {
+      "description": "Living room floor: water damage through to subfloor",
+      "amountWei": "300000000000000",
+      "evidence": "Check-out inspection records the engineered floor lifted and cupped across approximately six square metres, with the subfloor beneath recorded as wet. A plumber's report dated 2026-02-02 attributes the water to a disconnected washing machine hose in the adjoining utility area. Photographs from check-in show the floor flat and unmarked. A flooring contractor's quotation for lifting, drying and relaying is included."
+    },
+    {
+      "description": "Bathroom: removed and unreturned fittings",
+      "amountWei": "300000000000000",
+      "evidence": "Check-in inventory lists a heated towel rail, a mirrored cabinet and a shower screen, each photographed. Check-out photographs show bare pipework, unfilled wall fixings where the cabinet was mounted, and no screen. The tenant's forwarding correspondence dated 2026-02-20 states the items were 'taken as they were replaced at my own cost', and no replacement receipts or landlord consent are in the bundle."
+    },
+    {
+      "description": "Garden: removal of dumped material",
+      "amountWei": "300000000000000",
+      "evidence": "Check-out photographs show approximately three cubic metres of construction waste, including plasterboard and broken tiling, stacked against the rear boundary. The check-in inventory records the garden as clear and laid to lawn, with photographs. A licensed waste carrier's invoice dated 2026-02-14 for collection and disposal is included, with a waste transfer note."
+    },
+    {
+      "description": "Whole property: redecoration after unauthorized painting",
+      "amountWei": "300000000000000",
+      "evidence": "Check-in inventory records all walls in a neutral emulsion, photographed room by room. Check-out photographs record every room repainted in dark, high-contrast colours. The tenancy agreement clause 12 prohibits redecoration without the landlord's prior written consent, and no consent is in the bundle. A decorator's quotation for stain-blocking primer and two coats throughout is included."
+    }
+  ]
+}

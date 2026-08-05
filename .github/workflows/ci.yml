@@ -41,13 +41,9 @@ jobs:
       # predicate together, in one commit.
       expected-properties: 7
 
-      # NARROWED FROM THE `src test script` DEFAULT, and the reason is not a
-      # pre-existing violation: this repo has no script/ directory, because
-      # nothing is deployed yet. `forge fmt --check` tolerates the missing path
-      # today, but naming a directory that does not exist is a claim that would
-      # quietly become wrong the moment somebody created it with unformatted
-      # contents. Restore the default in the same commit that adds script/.
-      fmt-paths: src test
+      # The default, restored in the commit that added script/ — exactly as the
+      # narrowed value said it would be.
+      fmt-paths: src test script
 
       # No coverage exclusion. This repo holds no generated verifier and no other
       # file the 100% gate cannot reach; every line, statement, branch and
