@@ -141,7 +141,7 @@ func TestAFullRunAdjudicatesEveryItemAndSubmitsNothing(t *testing.T) {
 		}
 	}
 	// Fifteen rendered submissions: five items times three slots, none refused.
-	if n := strings.Count(log, "would submit:"); n != config.ItemCount*config.SlotCount {
+	if n := strings.Count(log, "SUBMIT "); n != config.ItemCount*config.SlotCount {
 		t.Errorf("rendered %d submissions, want %d", n, config.ItemCount*config.SlotCount)
 	}
 	// NOTHING IS BROADCAST. The run renders `send` argument lists and never
@@ -352,8 +352,30 @@ func TestARefusingSlotIsSkippedAndTheOthersStillSubmit(t *testing.T) {
 		t.Fatalf("the refusal was not logged:\n%s", log)
 	}
 	want := config.ItemCount * (config.SlotCount - 1)
-	if n := strings.Count(log, "would submit:"); n != want {
+	if n := strings.Count(log, "SUBMIT "); n != want {
 		t.Fatalf("rendered %d submissions, want %d — a refused slot must submit nothing", n, want)
+	}
+}
+
+// TestPrintRootNeedsNothingButTheBundle covers the mode the landlord uses to
+// file: it must work before the contract exists, so it reads no chain, calls no
+// model and needs no configuration at all.
+func TestPrintRootNeedsNothingButTheBundle(t *testing.T) {
+	d := deps(t, map[string]string{}) // deliberately empty environment
+	d.Doer = doerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("no vendor may be called")
+	})
+	d.Runner = runnerFunc(func(context.Context, string, ...string) ([]byte, error) {
+		return nil, errors.New("no chain may be read")
+	})
+
+	var out bytes.Buffer
+	code := app.RunWith(context.Background(), &out, argv("-print-root"), d)
+	if code != app.ExitOK {
+		t.Fatalf("exit = %d, want %d\n%s", code, app.ExitOK, out.String())
+	}
+	if got := strings.TrimSpace(out.String()); got != bundleRoot(t).Hex() {
+		t.Fatalf("printed %q, want %s", got, bundleRoot(t).Hex())
 	}
 }
 

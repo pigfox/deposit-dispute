@@ -153,6 +153,14 @@ const (
 	LogAskingItem         = "item %d: asking slot %d (%s)"
 	LogResolvedModel      = "item %d: slot %d answered as %q (requested %q)"
 	LogRefusal            = "item %d: slot %d REFUSED: %v"
-	LogItemOutcome        = "item %d: %d/%d established, %d refusals"
-	LogChainVerified      = "chain: all %d slots match the deployed adjudicator set"
+	// LogRefusalRaw records what the model actually sent when a reply is refused.
+	//
+	// ADDED AFTER THE FIRST LIVE RUN, which produced two refusals out of thirty
+	// calls and could say only that the JSON was malformed — not what arrived.
+	// A refusal without the text is a report that something went wrong without
+	// the evidence of what, which is exactly the position this program exists to
+	// keep a third party out of.
+	LogRefusalRaw    = "item %d: slot %d raw reply (bounded): %q"
+	LogItemOutcome   = "item %d: %d/%d established, %d refusals"
+	LogChainVerified = "chain: all %d slots match the deployed adjudicator set"
 )

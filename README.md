@@ -279,8 +279,17 @@ asserted deterministically instead, which is the stronger check anyway.
 
 ## Deployment
 
-**Nothing is deployed yet.** This section describes what will be, and the exact
-sequence that does it. No address in this repository is a deployed address.
+**Live on Base Sepolia 84532**, deployed and verified 5 August 2026. Both
+disputes ran their full lifecycle — filed, adjudicated by three models over
+thirty independent calls, settled, and withdrawn.
+
+| | Address | Deposit | Outcome |
+|---|---|---|---|
+| **A — the split** | [`0x025A2A50995485C03D0De9604133DfdaCddD9410`](https://sepolia.basescan.org/address/0x025A2A50995485C03D0De9604133DfdaCddD9410#code) | 0.002 ETH | landlord 0.001, tenant 0.001 |
+| **B — the cap** | [`0x6698DfB87Db53f63C6480559C0bDf4Fa2Ff501F2`](https://sepolia.basescan.org/address/0x6698DfB87Db53f63C6480559C0bDf4Fa2Ff501F2#code) | 0.0002 ETH | landlord 0.0002, tenant 0 |
+
+Both verified on Basescan. Both contracts now hold **zero** — every wei that went
+in came out to one of the two parties, and `landlord + tenant == deposit` in each.
 
 DIRECT-CHAIN ONLY: Base Sepolia 84532, and nothing else. `foundry.toml` names no
 endpoint, the deploy script has no local-node path and no rehearsal mode, and the
@@ -412,12 +421,61 @@ value is `NotEstablished` and two agreeing findings are needed to establish
 anything, **a refusal can only ever make it harder to take money from the
 tenant**.
 
-### What the vendors actually did when asked
+### What the vendors actually did across thirty live calls
 
-Observed **5 August 2026**, by probing all three configured slots with one
-minimal call each. This is what happened on that day, to those three models. It
-is not a claim about vendors in general, about other models, or about any other
-date — three models on one afternoon is not a survey.
+Observed **5 August 2026**: two disputes × five items × three slots, one
+independent call each. This is what happened on that day, to those three models.
+It is not a claim about vendors in general, about other models, or about any
+other date — thirty calls in one afternoon is not a survey.
+
+**Identifier resolution: 30 of 30 exact.** Every call came back reporting the
+identifier it was asked for. Slot 1 had already been pinned from the alias
+`gpt-5.4` to the snapshot `gpt-5.4-2026-03-05` after the reachability probe
+below, and once pinned it never diverged again.
+
+**Temperature: held for all 30.** Slots 0 and 2 omitted the field, slot 1 sent
+it as zero. No HTTP 400s during the run.
+
+**Two parse refusals out of thirty — both malformed JSON, both on item 4.**
+
+| Dispute | Item | Slot | Model | Error |
+|---|---|---|---|---|
+| A | 4 | 0 | `claude-opus-5` | `unexpected end of JSON input` — the reply was truncated mid-object |
+| B | 4 | 2 | `claude-sonnet-5` | `invalid character '}' after object key` |
+
+Neither was fenced and neither was prose-prefixed; both were the agreed shape,
+started, and then broken. The truncation is most likely the 1024-token reply
+bound being reached inside a long narrative.
+
+**What the refusals cost: nothing, by design.** Each affected item was decided by
+the two slots that did answer — item 4 of dispute A went 2–0 `NotEstablished`,
+item 4 of dispute B went 2–0 `Established`. A refusal removes a voice, and
+because two agreeing findings are needed to establish anything, it can only ever
+make it *harder* to take money from the tenant. Nothing was retried, nothing was
+salvaged from the broken text, and no finding was inferred from it.
+
+**A gap this run exposed, now closed.** The refusals above could be reported as
+*malformed* but not *quoted* — the panel logged the error and not the text it
+refused. That is a report without its evidence, so `LogRefusalRaw` now records a
+bounded copy of the raw reply alongside every refusal. It was added after the run
+rather than before it, and the two raw replies above are therefore lost; the next
+run will have them.
+
+**Dissent: on two items, both in dispute A.**
+
+| Dispute | Item | Split | Finding |
+|---|---|---|---|
+| A | 1 — unfilled fixings | 2–1 | Established |
+| A | 2 — cracked pane | 2–1 | NotEstablished |
+
+Every other adjudicated item was unanimous among the slots that answered. Item 2
+is the one the evidence was written to be genuinely contested — the tenant claims
+the crack pre-dated the tenancy and the check-in inventory has no photograph —
+and the panel split on it, which is the behaviour the design is for.
+
+### What the reachability probe found earlier the same day
+
+Before the run, all three slots were probed with one minimal call each.
 
 | Slot | Requested | Vendor answered as | Temperature field |
 |---|---|---|---|

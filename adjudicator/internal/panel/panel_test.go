@@ -260,6 +260,10 @@ func TestARefusalIsARefusalAndNotAGuess(t *testing.T) {
 			if !strings.Contains(logbuf.String(), "REFUSED") {
 				t.Fatalf("the refusal was not logged:\n%s", logbuf.String())
 			}
+			// A refusal must carry the evidence of what was refused.
+			if tc.err == nil && !strings.Contains(logbuf.String(), "raw reply") {
+				t.Fatalf("the raw reply was not recorded:\n%s", logbuf.String())
+			}
 		})
 	}
 }
@@ -283,6 +287,24 @@ func TestSpendSurfaceNamesEveryMeteredCallBeforeItIsMade(t *testing.T) {
 	}
 	if !strings.Contains(joined, config.LogTemperatureSent) {
 		t.Error("the surface should say when it is sent")
+	}
+}
+
+// TestARunawayReplyIsBoundedInTheLog keeps one bad response from flooding a run
+// while still recording enough of it to be evidence.
+func TestARunawayReplyIsBoundedInTheLog(t *testing.T) {
+	fakes := threeSlots(config.FindingEstablished)
+	fakes[0].reply = strings.Repeat("A", 5000)
+	p, logbuf := newPanel(t, fakes)
+
+	p.Adjudicate(context.Background(), testItem(0))
+
+	written := logbuf.String()
+	if !strings.Contains(written, config.TruncationSuffix) {
+		t.Fatalf("a runaway reply was not truncated:\n%s", written[:400])
+	}
+	if len(written) > 5000 {
+		t.Fatalf("the log is %d bytes; the bound is not holding", len(written))
 	}
 }
 

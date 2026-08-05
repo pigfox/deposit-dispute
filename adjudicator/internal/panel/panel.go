@@ -209,9 +209,12 @@ func (p *Panel) ask(
 	if err != nil {
 		// A REFUSAL, NOT A GUESS. Nothing here retries with a looser parser, asks
 		// the model to try again, or infers a finding from what the reply seemed
-		// to lean towards. The slot abstains and says why.
+		// to lean towards. The slot abstains and says why — and says what it was
+		// given, because "malformed JSON" without the text is a claim a reader
+		// cannot check.
 		v.Refusal = err
 		p.logf(config.LogRefusal, item.Index, slot, err)
+		p.logf(config.LogRefusalRaw, item.Index, slot, bounded(reply.Text))
 		return v
 	}
 
@@ -219,6 +222,18 @@ func (p *Panel) ask(
 	v.Reason = parsed.Reason
 	v.NarrativeHash = evidence.Keccak([]byte(parsed.Narrative))
 	return v
+}
+
+// rawReplyMaxLen bounds how much of a refused reply reaches the log. Enough to
+// see what shape arrived; not so much that one runaway response floods the run.
+const rawReplyMaxLen = 400
+
+// bounded trims a refused reply for the log.
+func bounded(s string) string {
+	if len(s) <= rawReplyMaxLen {
+		return s
+	}
+	return s[:rawReplyMaxLen] + config.TruncationSuffix
 }
 
 // logf writes a line when a logger is present.

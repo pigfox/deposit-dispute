@@ -4,12 +4,14 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/pigfox/deposit-dispute/adjudicator/internal/chain"
@@ -68,6 +70,7 @@ func Run(ctx context.Context, out io.Writer, argv []string) int {
 // options are the parsed command line.
 type options struct {
 	bundlePath string
+	printRoot  bool
 }
 
 // parseArgs reads the command line into options.
@@ -76,6 +79,8 @@ func parseArgs(out io.Writer, argv []string) (options, error) {
 	fs := flag.NewFlagSet(argv[0], flag.ContinueOnError)
 	fs.SetOutput(out)
 	fs.StringVar(&opts.bundlePath, "bundle", "", "path to the published evidence bundle (required)")
+	fs.BoolVar(&opts.printRoot, "print-root", false,
+		"print the bundle's merkle root and exit; makes no vendor call and reads no chain")
 	if err := fs.Parse(argv[1:]); err != nil {
 		return options{}, err
 	}
@@ -83,6 +88,31 @@ func parseArgs(out io.Writer, argv []string) (options, error) {
 		return options{}, fmt.Errorf("%w: --bundle", config.ErrMissing)
 	}
 	return opts, nil
+}
+
+// Submission is one verdict rendered as the call that would put it on chain.
+//
+// EMITTED AS JSON, one per line, because the reason string is model-written and
+// can carry spaces — a whitespace-delimited log line would be ambiguous exactly
+// where it matters most. The slot is included because a rendered submission that
+// does not say WHO must sign it is incomplete: only that slot's registered signer
+// can submit it.
+type Submission struct {
+	Slot int      `json:"slot"`
+	Item int      `json:"item"`
+	Args []string `json:"args"`
+}
+
+// submitPrefix marks a rendered submission line.
+const submitPrefix = "SUBMIT "
+
+// jsonLine encodes a value for the log, reporting rather than hiding a failure.
+func jsonLine(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return `{"error":` + strconv.Quote(err.Error()) + `}`
+	}
+	return string(b)
 }
 
 // RunWith performs one adjudication against injected dependencies.
@@ -100,15 +130,23 @@ func RunWith(ctx context.Context, out io.Writer, argv []string, deps Deps) int {
 		return ExitUsage
 	}
 
-	cfg, err := config.Load(deps.Getenv)
-	if err != nil {
-		logger.Printf("config: %v", err)
-		return ExitConfig
-	}
-
 	doc, bundle, err := loadBundle(deps, opts.bundlePath)
 	if err != nil {
 		logger.Printf("bundle: %v", err)
+		return ExitConfig
+	}
+
+	// The landlord needs the root BEFORE the contract has one, to file it. This
+	// mode reads no chain, calls no model and needs no configuration beyond the
+	// bundle itself.
+	if opts.printRoot {
+		logger.Print(evidence.Root(bundle).Hex())
+		return ExitOK
+	}
+
+	cfg, err := config.Load(deps.Getenv)
+	if err != nil {
+		logger.Printf("config: %v", err)
 		return ExitConfig
 	}
 
@@ -196,8 +234,11 @@ func adjudicateAll(
 				// voice, which can only make establishing the deduction harder.
 				continue
 			}
-			logger.Printf("would submit: %v",
-				chain.SubmitArgs(cfg.DisputeAddress, v, bundle[index], proofs[index]))
+			logger.Print(submitPrefix + jsonLine(Submission{
+				Slot: v.Slot,
+				Item: index,
+				Args: chain.SubmitArgs(cfg.DisputeAddress, v, bundle[index], proofs[index]),
+			}))
 		}
 	}
 }
