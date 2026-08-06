@@ -56,6 +56,34 @@ jobs:
       # exclusion is a hole that reads as a decision.
       coverage-exclusions: ''
 
+      # NOT A COVERAGE EXCLUSION, and the distinction is the whole point: this
+      # drops a TEST CONTRACT from INSTRUMENTATION, not a src/ file from the gate.
+      # `coverage-exclusions` above stays EMPTY — no file is excluded, no
+      # threshold moves, and src/DepositDispute.sol is still required at 100% on
+      # all four metrics.
+      #
+      # InvariantsTest STILL RUNS IN FULL. It runs at the `forge test` stage in
+      # the same job, at this repo's [profile.ci] depth, and its properties are
+      # additionally driven by Echidna and Medusa, both of which assert they
+      # registered all seven. Nothing here reduces what is executed.
+      #
+      # WHY, with the numbers that forced it. This repo's harness builds merkle
+      # proofs in Solidity, so every invariant call does real hashing, and
+      # `forge coverage` disables the optimizer. Instrumented, the run peaks at
+      # 33.8 GiB (Maximum resident set size 35421688 kB) against a standard
+      # runner's 4 vCPU / 16 GB — so the runner died three times rather than the
+      # gate ever failing. The cost is this one suite: 67 unit tests cost 0.37
+      # CPU-seconds, 20 invariant tests cost 2,473.
+      #
+      # AND IT MEASURES NOTHING THE UNIT SUITE MISSES. Measured, not assumed:
+      # excluded, the report is byte-identical — 151/151 lines, 184/184
+      # statements, 40/40 branches, 26/26 functions — in 5.6s at 433 MiB.
+      #
+      # If that ever stops being true, THIS GATE FAILS. A row that drops below
+      # 100% is a failure, and a sub-100% row is the only way this exclusion could
+      # hide anything. It cannot go quiet.
+      coverage-no-match-contract: 'InvariantsTest'
+
   # DIAGNOSTIC, NOT A GATE. `continue-on-error` is deliberate and is the whole
   # point: this job exists to make the coverage stage's resource use VISIBLE, and
   # a diagnostic that can turn the tree red would be a second gate nobody asked
