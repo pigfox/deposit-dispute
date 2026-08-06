@@ -52,6 +52,79 @@ jobs:
       # exclusion is a hole that reads as a decision.
       coverage-exclusions: ''
 
+  # DIAGNOSTIC, NOT A GATE. `continue-on-error` is deliberate and is the whole
+  # point: this job exists to make the coverage stage's resource use VISIBLE, and
+  # a diagnostic that can turn the tree red would be a second gate nobody asked
+  # for. The real gate is `pipeline / forge`, unchanged and still authoritative.
+  #
+  # WHY IT EXISTS. The 100% coverage gate had never run in this repository's CI:
+  # every run before the size-gate fix died at `forge build --sizes`, the FIRST
+  # step of that job, so `forge coverage` was never reached. The two runs that did
+  # reach it both lost the RUNNER rather than failing a check — one announced
+  # `The runner has received a shutdown signal` after 8m47s, the other was killed
+  # with its step frozen and its log discarded after 49+ minutes. A disappearance
+  # is not evidence, so this job samples memory and reports peak RSS as it goes.
+  # Whether it passes or dies, the next attempt produces numbers.
+  #
+  # It runs the SAME command the gate runs, under the SAME FOUNDRY_PROFILE, so its
+  # figures describe the gate rather than an approximation of it.
+  coverage-diagnostics:
+    name: coverage resource diagnostics (not a gate)
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    env:
+      FOUNDRY_PROFILE: ci
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1.3.1
+        with:
+          version: v1.4.2
+
+      - name: What this runner has
+        run: |
+          set -euo pipefail
+          echo "nproc:        $(nproc)"
+          echo "MemTotal:     $(awk '/MemTotal/{print $2/1048576 " GiB"}' /proc/meminfo)"
+          echo "MemAvailable: $(awk '/MemAvailable/{print $2/1048576 " GiB"}' /proc/meminfo)"
+          echo "SwapTotal:    $(awk '/SwapTotal/{print $2/1048576 " GiB"}' /proc/meminfo)"
+          df -h / | tail -1
+
+      # A background sampler, because peak RSS reported at exit is lost if the
+      # process is killed — which is exactly the case being investigated. This
+      # prints a line a minute, so a run that dies still leaves a trail showing
+      # what memory was doing when it went.
+      - name: Coverage under memory sampling
+        run: |
+          set -uo pipefail
+          (
+            while true; do
+              rss="$(ps -eo rss,comm --no-headers | awk '$2 ~ /forge/ {s+=$1} END {print s+0}')"
+              echo "[sample] $(date -u +%H:%M:%S) forge_rss=$((rss/1024))MiB avail=$(awk '/MemAvailable/{printf "%d", $2/1024}' /proc/meminfo)MiB"
+              sleep 60
+            done
+          ) &
+          sampler=$!
+          rc=0
+          /usr/bin/time -v -o time.txt lib/solidity-pipeline/scripts/coverage.sh || rc=$?
+          kill "$sampler" 2>/dev/null || true
+          echo "=== coverage.sh exit: $rc ==="
+          echo "=== /usr/bin/time -v ==="
+          cat time.txt || echo "(time.txt absent — the process did not exit normally)"
+          exit "$rc"
+
+      - name: Upload the diagnostic artifacts
+        if: always()
+        uses: actions/upload-artifact@v4.4.3
+        with:
+          name: coverage-diagnostics
+          path: |
+            time.txt
+            coverage-summary.txt
+          if-no-files-found: warn
+
   # The off-chain adjudicator panel. Separate from the Solidity pipeline because
   # it gates different things — Go formatting, vet, lint, tests and 100%
   # coverage — against the same contract.
