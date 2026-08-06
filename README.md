@@ -28,34 +28,79 @@ transaction hashes are below.
 commit this repo pins, so a local run and a CI run are the same bytes. Every gate
 runs. Ten of the eleven jobs are green: the gate self-test, both linters, the
 doctrine gate, the static property count, formatting, tests and invariants, the
-100% coverage gate on `src/`, the EIP-55 address-checksum gate, Slither at
-`fail-on: low`, Echidna and Medusa — the last two each registering all seven
-declared properties.
+EIP-55 address-checksum gate, Slither at `fail-on: low`, Echidna and Medusa — the
+last two each registering all seven declared properties.
 
-**One stage is red, and it is red here too.** `forge build --sizes` fails:
+**THE SIZE STAGE IS FIXED.** It was red, it is now green, and it was fixed in the
+pipeline rather than here. `forge build --sizes` used to fail on
+`test/Properties.sol` at 25,044 bytes against EIP-170's 24,576:
 
 ```
 | Properties | 25,044 | 26,084 | -468 | 23,068 |
 Error: some contracts exceed the runtime size limit (EIP-170: 24576 bytes)
 ```
 
-`test/Properties.sol` is the property-fuzzing harness. EIP-170 bounds the runtime
-bytecode a chain will accept for a **deployed** contract; this harness is
-constructed in process by Echidna, by Medusa and by `forge test`, and there is no
-path by which it is deployed anywhere. So the limit does not apply to it
-substantively, while `forge build --sizes` fails the whole build on it anyway.
-The correct fix is in the pipeline rather than here — scope the size gate to
-`src/`, which is the only tree whose contents are deployed — and it is **pending**.
-This is stated rather than worked around: the harness is not shrunk to satisfy an
-inapplicable limit, no exclusion is plumbed in locally, and the stage is not
-described as passing.
+The root cause was in the tool, not the harness. `--sizes` decides what counts as
+a test by **filename** — `*.t.sol` and `*.s.sol` are left out of the table — and
+this estate's harness convention is `test/Properties.sol`, which that heuristic
+misses. EIP-170 bounds the runtime bytecode of a **deployed** contract, and this
+harness is constructed in process by Echidna, by Medusa and by `forge test`, and
+is deployed nowhere. The heuristic was also too *loose* in the other direction:
+`test/DepositDispute.t.sol` compiles to 53,113 bytes of runtime and 53,170 of
+initcode — over both limits twice over — and `--sizes` said nothing about it.
 
-**It is not a CI-only failure.** `forge build --sizes` and `forge build --force
---sizes` produce the identical 25,044 bytes on a laptop, on the same pinned
-Foundry, and `[profile.ci]` overrides only fuzz and invariant run counts, so the
-optimizer settings are shared. The stage was red before this repository had a
-remote; what publishing it changed is that the red is now visible. Its absence
-from the earlier gate summaries is how it stayed unnoticed.
+The pipeline now runs `forge build` over the whole tree and checks sizes in a
+separate step, `scripts/sizes.sh`, which takes scope from each artifact's own
+`compilationTarget`. A SOURCE PATH decides what is in scope, so a stale artifact
+in `out/` cannot put a harness back into it. Both EIP-170 and EIP-3860 remain
+fully enforced on `src/`, with no exclusion flag. **Nothing here was weakened to
+achieve that:** the harness was not shrunk, no exclusion was plumbed in locally,
+and `src/DepositDispute.sol` passes on its merits at 7,326 bytes runtime and 9,858
+initcode. The stage now completes in under a second.
+
+**A different stage is red now, and it is honest to say the fix revealed it.** The
+100% coverage gate on `src/` has never completed in CI for this repository: every
+run before the size fix died at `forge build --sizes`, which is the *first* step of
+that job, so `forge coverage` was never reached. Now that it is reached, the job is
+being lost inside it. Two consecutive attempts ended with the runner going away
+mid-coverage — the first said so explicitly, `The runner has received a shutdown
+signal`, after 8m47s; the second was killed with its step frozen and its log
+discarded, after more than 49 minutes.
+
+**The same gate passes locally, and it is not slow.** Measured rather than
+recalled — `lib/solidity-pipeline/scripts/coverage.sh`, this repository, under the
+default profile:
+
+```
+Ran 2 test suites in 82.23s: 87 tests passed, 0 failed, 0 skipped
+| src/DepositDispute.sol | 100.00% (151/151) | 100.00% (184/184) | 100.00% (40/40) | 100.00% (26/26) |
+PASSED: 1 file(s) at 100% on all four metrics.
+real 1m30.379s   user 9m0.798s
+```
+
+So `src/` genuinely is at 100% on all four metrics, and the wall time is ninety
+seconds. What that also shows is where the cost is: **nine minutes of CPU**,
+finished in ninety seconds only because it was spread across cores. A
+GitHub-hosted runner has a few vCPU, not a few dozen, so the same work is
+several minutes of wall time there — which is far more than the **56 to 84
+seconds** the identical stage takes in every other consumer, and is a real
+difference in this repository's cost.
+
+**But that does not explain what happened, and it should not be dressed up as if
+it did.** Several minutes is not forty-nine, and neither failure looked like a
+slow gate finishing late: one runner announced its own shutdown, the other was
+killed with its step frozen mid-flight and its log discarded. Both are the runner
+going away, not the gate returning a verdict. The leading candidate is resource
+exhaustion — `forge coverage` disables the optimizer, and this repository's
+harness is the heaviest in the estate, the same 25,044-byte `Properties` contract
+above — which on a fixed-memory runner would present exactly this way. **That is
+untested.** An earlier guess, that `[profile.ci]` raises the invariant campaign
+here, was checked and is wrong: every consumer carries identical fuzz and
+invariant settings.
+
+**Open work, and the gate is not described as passing.** A gate that completes
+locally and cannot complete in CI is not a gate that is running in CI, and saying
+so is worth more than a green square.
 
 The off-chain panel lives in `adjudicator/` — Go, 100% covered on every package,
 `golangci-lint` clean, and it makes no vendor call and reaches no node in test.
