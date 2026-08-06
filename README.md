@@ -295,6 +295,71 @@ DIRECT-CHAIN ONLY: Base Sepolia 84532, and nothing else. `foundry.toml` names no
 endpoint, the deploy script has no local-node path and no rehearsal mode, and the
 adjudicator reads the chain id back and refuses to run against any other chain.
 
+### Every verdict, and the transaction that carried it
+
+Thirty calls produced **twenty-eight** verdicts and therefore twenty-eight
+transactions. The two rows that are absent are the two parse refusals in the
+table further down — item 4 slot 0 of dispute A, item 4 slot 2 of dispute B. A
+refused reply yields no finding, so there is nothing to submit and no transaction
+to point at. That is the only reason either is missing.
+
+All twenty-eight were mined with status `0x1`. **`Finding` is what the slot signer
+actually put on chain** — the fifth argument of the mined `submitVerdict` call,
+not what a log said the model meant. Slot 0 is `claude-opus-5`, slot 1
+`gpt-5.4-2026-03-05`, slot 2 `claude-sonnet-5`.
+
+| Dispute | Item | Slot | Finding | Transaction |
+|---|---|---|---|---|
+| A | 0 | 0 | Established | [`0xf330b8dc32346f7e15f256af4a74c21efae9cff5f21ece0ff97b2954325428c9`](https://sepolia.basescan.org/tx/0xf330b8dc32346f7e15f256af4a74c21efae9cff5f21ece0ff97b2954325428c9) |
+| A | 0 | 1 | Established | [`0xfdaa57e902b57535aaaa1bd111d4b9dc7b3eb1e96c896e2f708655e126df4b7d`](https://sepolia.basescan.org/tx/0xfdaa57e902b57535aaaa1bd111d4b9dc7b3eb1e96c896e2f708655e126df4b7d) |
+| A | 0 | 2 | Established | [`0x66cac7fa28c3d1f39d53c5929af8e76a544ef0def3a2d24fe42e995c962823b6`](https://sepolia.basescan.org/tx/0x66cac7fa28c3d1f39d53c5929af8e76a544ef0def3a2d24fe42e995c962823b6) |
+| A | 1 | 0 | Established | [`0xa561deb0af0125c5a701ab4ac225f63fc60553cc61914a43e188aaeea1871ed0`](https://sepolia.basescan.org/tx/0xa561deb0af0125c5a701ab4ac225f63fc60553cc61914a43e188aaeea1871ed0) |
+| A | 1 | 1 | Established | [`0x7f2b2f5dad9f1f8b55d1b1a8da72c5e1210ab417ff23a4667b547b0ba1625d57`](https://sepolia.basescan.org/tx/0x7f2b2f5dad9f1f8b55d1b1a8da72c5e1210ab417ff23a4667b547b0ba1625d57) |
+| A | 1 | 2 | NotEstablished | [`0x6ff61d8b62acdd7d9e7d7ebb473b87188ee7bbf9d37d91b07a7d4d4e8e7af772`](https://sepolia.basescan.org/tx/0x6ff61d8b62acdd7d9e7d7ebb473b87188ee7bbf9d37d91b07a7d4d4e8e7af772) |
+| A | 2 | 0 | NotEstablished | [`0x07371fd38c620b16d10d48884d7408f0f03692c616f9aac67a368a2a64365090`](https://sepolia.basescan.org/tx/0x07371fd38c620b16d10d48884d7408f0f03692c616f9aac67a368a2a64365090) |
+| A | 2 | 1 | Established | [`0x1d388c8203d862fbb9728f68e6b75499c54c3da64cb6ee3dc02dbc0751ec108b`](https://sepolia.basescan.org/tx/0x1d388c8203d862fbb9728f68e6b75499c54c3da64cb6ee3dc02dbc0751ec108b) |
+| A | 2 | 2 | NotEstablished | [`0x2219035472c01c05b7c8a12c4ffc8a4a9bb33048d85d1c76177ccbd44606524e`](https://sepolia.basescan.org/tx/0x2219035472c01c05b7c8a12c4ffc8a4a9bb33048d85d1c76177ccbd44606524e) |
+| A | 3 | 0 | Established | [`0x252badde2c890dc1dae345c4f2aeb59865894581e699cf1a181a988685d0f49e`](https://sepolia.basescan.org/tx/0x252badde2c890dc1dae345c4f2aeb59865894581e699cf1a181a988685d0f49e) |
+| A | 3 | 1 | Established | [`0x459bcba745f1fe9971536810077df13b72cd4fa462e3dd9ef1ea74655ae26106`](https://sepolia.basescan.org/tx/0x459bcba745f1fe9971536810077df13b72cd4fa462e3dd9ef1ea74655ae26106) |
+| A | 3 | 2 | Established | [`0xecf500f7c492377958886e0b382b6b08b38789aa489cd1c3b078b632459917e0`](https://sepolia.basescan.org/tx/0xecf500f7c492377958886e0b382b6b08b38789aa489cd1c3b078b632459917e0) |
+| A | 4 | 1 | NotEstablished | [`0x52b5a2ba8ee3527b0bf033c1b9e9ce007e6985a4cc8f01b92c0ecd42b02fe80d`](https://sepolia.basescan.org/tx/0x52b5a2ba8ee3527b0bf033c1b9e9ce007e6985a4cc8f01b92c0ecd42b02fe80d) |
+| A | 4 | 2 | NotEstablished | [`0x33f0637d782e78a5dbf19dd9989df620f032614dad51c67bf15a98e73f30344b`](https://sepolia.basescan.org/tx/0x33f0637d782e78a5dbf19dd9989df620f032614dad51c67bf15a98e73f30344b) |
+| B | 0 | 0 | Established | [`0x5d32c696658c396fc9f0bec68c9e8226215b46d58a8ca744708be18460655f7d`](https://sepolia.basescan.org/tx/0x5d32c696658c396fc9f0bec68c9e8226215b46d58a8ca744708be18460655f7d) |
+| B | 0 | 1 | Established | [`0xc9168ece3f2918851489238e9a4a70f315932a67f27e03a53615636a63ead8fd`](https://sepolia.basescan.org/tx/0xc9168ece3f2918851489238e9a4a70f315932a67f27e03a53615636a63ead8fd) |
+| B | 0 | 2 | Established | [`0x4a47d8524dc3dbcf37417245952074aff8a45a39c8fe52a77a9dc711b7c0ff6f`](https://sepolia.basescan.org/tx/0x4a47d8524dc3dbcf37417245952074aff8a45a39c8fe52a77a9dc711b7c0ff6f) |
+| B | 1 | 0 | Established | [`0x208b3fd26b1f320628268d483ad681c8e8cff325ce73835463414a6b74f3f4da`](https://sepolia.basescan.org/tx/0x208b3fd26b1f320628268d483ad681c8e8cff325ce73835463414a6b74f3f4da) |
+| B | 1 | 1 | Established | [`0x784fe740bc2c51591477747f1ee72b7acb58f3e0d9f5c4b17169d07d6ed520c9`](https://sepolia.basescan.org/tx/0x784fe740bc2c51591477747f1ee72b7acb58f3e0d9f5c4b17169d07d6ed520c9) |
+| B | 1 | 2 | Established | [`0xa22ad04eb09b2314e56bb514c71647f0b00aa8f8f9e548e6b684bf6de9194d9b`](https://sepolia.basescan.org/tx/0xa22ad04eb09b2314e56bb514c71647f0b00aa8f8f9e548e6b684bf6de9194d9b) |
+| B | 2 | 0 | Established | [`0xb7623b73f9c14298582816fcc1dc7bfa22bb7040a8a3b19d75f750f0af6e7eab`](https://sepolia.basescan.org/tx/0xb7623b73f9c14298582816fcc1dc7bfa22bb7040a8a3b19d75f750f0af6e7eab) |
+| B | 2 | 1 | Established | [`0x3729228750741c5dae95759de34493c846e0b29fc0a3f8de3cc18a9f57a40691`](https://sepolia.basescan.org/tx/0x3729228750741c5dae95759de34493c846e0b29fc0a3f8de3cc18a9f57a40691) |
+| B | 2 | 2 | Established | [`0x546d1b15dabd76465aaf56f7a1363097c8bb5f34c30a3dd4fbf7d78f788c0b29`](https://sepolia.basescan.org/tx/0x546d1b15dabd76465aaf56f7a1363097c8bb5f34c30a3dd4fbf7d78f788c0b29) |
+| B | 3 | 0 | Established | [`0xc4d825386fa8f5d92dd54ec6738670e78c0da96bf722036a238f3ba418868a0a`](https://sepolia.basescan.org/tx/0xc4d825386fa8f5d92dd54ec6738670e78c0da96bf722036a238f3ba418868a0a) |
+| B | 3 | 1 | Established | [`0xdc628bf0fc973c53d3fab4fb644380288366026ad1a4472b700cb2ac2343c836`](https://sepolia.basescan.org/tx/0xdc628bf0fc973c53d3fab4fb644380288366026ad1a4472b700cb2ac2343c836) |
+| B | 3 | 2 | Established | [`0x88b7585904504d523598291c729cf156f10bf6893cf07bd73dfb05a1cf60d4ec`](https://sepolia.basescan.org/tx/0x88b7585904504d523598291c729cf156f10bf6893cf07bd73dfb05a1cf60d4ec) |
+| B | 4 | 0 | Established | [`0xf76c46199d3175c9b3514c7cf49fe090ab4c041413f4fc39494d46f98927e866`](https://sepolia.basescan.org/tx/0xf76c46199d3175c9b3514c7cf49fe090ab4c041413f4fc39494d46f98927e866) |
+| B | 4 | 1 | Established | [`0xcc398dbc44c19b9d716a1a796f199da73061e363bbc72d68690db3f27313e517`](https://sepolia.basescan.org/tx/0xcc398dbc44c19b9d716a1a796f199da73061e363bbc72d68690db3f27313e517) |
+
+The verdicts alone do not show the split; the lifecycle transactions around them
+do, and they are here for the same reason — so a third party can check the
+outcome rather than take this file's word for it.
+
+| Dispute | Step | Transaction |
+|---|---|---|
+| A | `fileClaim` | [`0x5e67e5da18c15a29ed9785c1ca2ef984a74e82020f94fb0d56cbee2b9dc51f35`](https://sepolia.basescan.org/tx/0x5e67e5da18c15a29ed9785c1ca2ef984a74e82020f94fb0d56cbee2b9dc51f35) |
+| A | `settle` | [`0xc7eba733f68dfcea33e8610911abe65985be18772918c6f969716ecf037ad660`](https://sepolia.basescan.org/tx/0xc7eba733f68dfcea33e8610911abe65985be18772918c6f969716ecf037ad660) |
+| A | `withdraw` — landlord | [`0x540b8266fa6e61ed625a186f259e56244e40d370b2a8de6224251746531d6e87`](https://sepolia.basescan.org/tx/0x540b8266fa6e61ed625a186f259e56244e40d370b2a8de6224251746531d6e87) |
+| A | `withdraw` — tenant | [`0xf03ae69d50788fe339a4d9e5d6176b60a595dfd019ddcbde125c16da3951f2b9`](https://sepolia.basescan.org/tx/0xf03ae69d50788fe339a4d9e5d6176b60a595dfd019ddcbde125c16da3951f2b9) |
+| B | `fileClaim` | [`0xd3b694c3f4b4b47bf9ed373cb5597c03b7b6241f9f8e7d1421405a3450f22dbd`](https://sepolia.basescan.org/tx/0xd3b694c3f4b4b47bf9ed373cb5597c03b7b6241f9f8e7d1421405a3450f22dbd) |
+| B | `settle` | [`0x32b3d71ffeeaa25c72fb0a30f2d2bae88b531e509f6465738fb6bbf81ac90e1b`](https://sepolia.basescan.org/tx/0x32b3d71ffeeaa25c72fb0a30f2d2bae88b531e509f6465738fb6bbf81ac90e1b) |
+| B | `withdraw` — landlord | [`0x0a96e2e38cc0e75a7e4a6c4dafe40b66fdef130a895c49ca8ccc79d26ef93e76`](https://sepolia.basescan.org/tx/0x0a96e2e38cc0e75a7e4a6c4dafe40b66fdef130a895c49ca8ccc79d26ef93e76) |
+| B | `withdraw` — tenant | **no transaction — reverted at estimation** with `NothingToWithdraw(0x81B30d03Ee68950A958e13447eb3d96dbD017011)` |
+
+That last row is the cap behaving correctly, not a failure. Dispute B established
+every item, the claim exceeded the deposit, the landlord took all of it and the
+tenant's award was zero — so there was nothing for the tenant to withdraw and the
+contract said so by name. A `withdraw` that had succeeded for a zero award is the
+bug this revert rules out.
+
 ### Two disputes, because one cannot show both states
 
 A dispute settles exactly once, so it demonstrates a partial split **or** the cap,
@@ -509,6 +574,46 @@ slots, all three answer 200.
 The probe that found this is `adjudicator/probe_live_test.go`, build-tagged
 `live` so it never runs in CI or under the coverage gate. It is the only test in
 the repository that spends money.
+
+### The settlement read that said the money had vanished
+
+Recorded because every other surprise from that day is recorded, and this was the
+one that looked worst for about a minute.
+
+Immediately after `settle()` on dispute A, a read of the public endpoint returned
+**`landlordAward` = 0** against a **0.002 ETH** deposit. Read literally, that says
+a settled dispute credited the landlord nothing — and paired with the
+`tenantAward` of 0.001 the same driver read, it says 0.001 ETH of a 0.002 ETH
+deposit is credited to nobody. Conservation broken, on a live contract, on the
+showpiece dispute.
+
+**The contract was fine. The measurement was wrong.** A direct re-query returned
+**0.001 + 0.001**, summing exactly to the deposit, which is the outcome the
+Deployment table above reports and the outcome the withdrawals then paid out.
+
+The cause was a stale read racing `settle()`'s inclusion. The driver sent
+`settle()` and then read the two awards **as two separate RPC calls, with no wait
+and no pinned block**. A public endpoint is a pool of replicas at slightly
+different heights, so the two calls were answered at two different heights: the
+first by a replica that had not yet seen the settle, the second by one that had.
+The pair `0 + 0.001` is therefore not a state any single block ever held — which
+is the tell, and the reason the impossible-looking number was the safest kind of
+wrong. Dispute B's report carries the same artifact in its milder form, both
+awards read as 0 when the real outcome was the full 0.0002 to the landlord.
+
+Two things worth keeping from it:
+
+- **The bad numbers are still in the run reports.** The scratchpad JSON for both
+  disputes records the pre-inclusion read, with `conserved: false` beside it. The
+  reports were not corrected after the fact, so anyone reading them sees the
+  stale figures and not the settled ones. The authority for what happened is the
+  chain, and above that the transaction tables — not those files.
+- **Nothing in the repository depended on that read.** The lifecycle driver that
+  made it was a one-off script and is not tracked here; the adjudicator signs
+  nothing and reads no award. Conservation is asserted deterministically by the
+  suite and driven by both fuzzers — `landlord + tenant == deposit` is a property,
+  not something confirmed by looking. A live read is corroboration of a property,
+  and this is what it costs to mistake it for the proof.
 
 ### The two halves are pinned to each other
 
