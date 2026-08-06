@@ -25,11 +25,16 @@ both contracts now hold zero. The addresses, the thirty-call findings and all 35
 transaction hashes are below.
 
 **On PIGFOX SOLIDITY PIPELINE v1**, consumed from `lib/solidity-pipeline` at a
-commit this repo pins, so a local run and a CI run are the same bytes. Every gate
-runs. Ten of the eleven jobs are green: the gate self-test, both linters, the
-doctrine gate, the static property count, formatting, tests and invariants, the
-EIP-55 address-checksum gate, Slither at `fail-on: low`, Echidna and Medusa — the
-last two each registering all seven declared properties.
+commit this repo pins, so a local run and a CI run are the same bytes. **All
+eleven jobs are green**: the gate self-test, both linters, the doctrine gate, the
+static property count, formatting, the deployable-bytecode size gate, tests and
+invariants, the 100% coverage gate on `src/`, the EIP-55 address-checksum gate,
+Slither at `fail-on: low`, Echidna and Medusa — the last two each registering all
+seven declared properties.
+
+Two stages had to be fixed to get there, both in the shared pipeline rather than
+here, and neither by changing a contract or a test. The sections below keep the
+account, because how they were red is more useful than the fact that they are not.
 
 **THE SIZE STAGE IS FIXED.** It was red, it is now green, and it was fixed in the
 pipeline rather than here. `forge build --sizes` used to fail on
@@ -58,49 +63,86 @@ achieve that:** the harness was not shrunk, no exclusion was plumbed in locally,
 and `src/DepositDispute.sol` passes on its merits at 7,326 bytes runtime and 9,858
 initcode. The stage now completes in under a second.
 
-**A different stage is red now, and it is honest to say the fix revealed it.** The
-100% coverage gate on `src/` has never completed in CI for this repository: every
-run before the size fix died at `forge build --sizes`, which is the *first* step of
-that job, so `forge coverage` was never reached. Now that it is reached, the job is
-being lost inside it. Two consecutive attempts ended with the runner going away
-mid-coverage — the first said so explicitly, `The runner has received a shutdown
-signal`, after 8m47s; the second was killed with its step frozen and its log
-discarded, after more than 49 minutes.
+### The coverage gate could not run here, and why
 
-**The same gate passes locally, and it is not slow.** Measured rather than
-recalled — `lib/solidity-pipeline/scripts/coverage.sh`, this repository, under the
-default profile:
+Fixing the size stage revealed the next one rather than causing it. **The 100%
+coverage gate had never completed in this repository's CI at all**: every run
+before the size fix died at `forge build --sizes`, which is the *first* step of
+that job, so `forge coverage` was never reached. Once it was, three runs lost the
+**runner** rather than failing a check — one announcing `The runner has received a
+shutdown signal` after 8m47s, two killed with their steps frozen and their logs
+discarded, one after more than 49 minutes.
+
+**It was memory, and here is the number.** Under the profile CI actually uses:
 
 ```
-Ran 2 test suites in 82.23s: 87 tests passed, 0 failed, 0 skipped
-| src/DepositDispute.sol | 100.00% (151/151) | 100.00% (184/184) | 100.00% (40/40) | 100.00% (26/26) |
+Maximum resident set size (kbytes): 35421688      →  33.8 GiB peak
+Elapsed (wall clock) time: 6:19.07    User time: 2062.31s at 555% CPU
+87 tests passed, 0 failed  —  100% on all four metrics
+```
+
+A standard GitHub-hosted `ubuntu-24.04` runner is **4 vCPU / 16 GB / 14 GB SSD**.
+The gate needed 33.8 GiB. It did not fit, and it never could.
+
+**A correction to an earlier version of this section, which had the wrong
+baseline.** It reported 1m30s wall and 9m0s CPU and treated the gate as merely
+expensive. Those figures were real but were measured under the **default** profile,
+while CI sets `FOUNDRY_PROFILE=ci` — fuzz 1024 / invariant 512 / depth 96 against
+the default's 512 / 256 / 64. That was an apples-to-oranges comparison, and it
+under-stated the cost by more than a factor of four. The figures above are the `ci`
+profile, which is what the gate runs.
+
+**The cost is one suite, and it measures nothing.** The split is stark:
+
+| | tests | CPU seconds |
+|---|---|---|
+| unit suite | 67 | **0.37** |
+| invariant suite | 20 | **2,473** |
+
+This repository's harness builds merkle proofs *in Solidity*, so every invariant
+call does real hashing, and `forge coverage` disables the optimizer. And the
+invariant suite covers nothing the unit suite already reaches — measured, not
+assumed: with it dropped from instrumentation the report is **byte-identical**,
+100% on all four metrics (151/151 lines, 184/184 statements, 40/40 branches, 26/26
+functions), in **5.6 seconds at 433 MiB** instead of 6m19s at 33.8 GiB.
+
+**So the fix drops that suite from INSTRUMENTATION, never from EXECUTION.** The
+pipeline gained an optional `coverage-no-match-contract` input and this repository
+is the only consumer that sets it. `InvariantsTest` still runs in full, in the same
+job, at this repository's `[profile.ci]` depth, and its properties are additionally
+driven by Echidna and Medusa — each asserting it registered all seven. Nothing
+executed is reduced.
+
+**Nothing was weakened to achieve it, and that is checkable rather than promised.**
+`coverage-exclusions` stays **empty**: no `src/` file is excluded, no threshold
+moves, and no row is removed from the check — an exclusion removes a row, this
+removes none. If the unit suite ever stops reaching a line, a statement, a branch
+or a function, that row falls below 100% and **this gate fails**. A sub-100% row is
+the only way the exclusion could hide anything, so the threshold is the guard on
+it, and the pipeline's self-test pins exactly that: a line shortfall, a branch
+shortfall and a vacuous report all still fail with the exclusion in force.
+
+**What was rejected, so the choice reads as a choice.** Two levers that would have
+changed nothing about what is measured were tried first and both failed: `threads=2`
+grew memory at ~5.8 GiB/min against ~5.5 at eight threads, and
+`FORGE_SUPPRESS_SUCCESSFUL_TRACES` peaked at 35,591,228 kB — effectively unchanged.
+Memory tracks accumulated work, not parallelism or trace retention. A larger runner
+would also have worked, but larger runners are billed per minute for public
+repositories and need a Team or Enterprise plan.
+
+**In CI, where it counts.** The stage that could not finish now takes **four
+seconds** — `14:55:33 -> 14:55:37` — and reports 100% on all four metrics. The
+invariant suite is visibly still running in the same job: `forge test` executes all
+**87 tests in 202s** immediately before it. The log states the exclusion out loud
+rather than applying it quietly, so a reader can see which suite did not contribute
+to the figures and that it still ran:
+
+```
+==> Instrumentation excluded test contracts matching: InvariantsTest
+==>   those tests STILL RUN at the forge test stage and under both fuzzers —
+  OK    src/DepositDispute.sol                   100% lines / statements / branches / functions
 PASSED: 1 file(s) at 100% on all four metrics.
-real 1m30.379s   user 9m0.798s
 ```
-
-So `src/` genuinely is at 100% on all four metrics, and the wall time is ninety
-seconds. What that also shows is where the cost is: **nine minutes of CPU**,
-finished in ninety seconds only because it was spread across cores. A
-GitHub-hosted runner has a few vCPU, not a few dozen, so the same work is
-several minutes of wall time there — which is far more than the **56 to 84
-seconds** the identical stage takes in every other consumer, and is a real
-difference in this repository's cost.
-
-**But that does not explain what happened, and it should not be dressed up as if
-it did.** Several minutes is not forty-nine, and neither failure looked like a
-slow gate finishing late: one runner announced its own shutdown, the other was
-killed with its step frozen mid-flight and its log discarded. Both are the runner
-going away, not the gate returning a verdict. The leading candidate is resource
-exhaustion — `forge coverage` disables the optimizer, and this repository's
-harness is the heaviest in the estate, the same 25,044-byte `Properties` contract
-above — which on a fixed-memory runner would present exactly this way. **That is
-untested.** An earlier guess, that `[profile.ci]` raises the invariant campaign
-here, was checked and is wrong: every consumer carries identical fuzz and
-invariant settings.
-
-**Open work, and the gate is not described as passing.** A gate that completes
-locally and cannot complete in CI is not a gate that is running in CI, and saying
-so is worth more than a green square.
 
 The off-chain panel lives in `adjudicator/` — Go, 100% covered on every package,
 `golangci-lint` clean, and it makes no vendor call and reaches no node in test.
