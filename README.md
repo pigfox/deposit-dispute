@@ -17,26 +17,48 @@ number could be argued into any number.
 
 ## Status
 
-**On PIGFOX SOLIDITY PIPELINE v1.** Every gate runs: the gate self-test, both
-linters, the doctrine gate, the static property count, formatting, build, tests
-and invariants, the 100% coverage gate, Slither at `fail-on: low`, Echidna and
-Medusa. Every gate comes from `lib/solidity-pipeline`, vendored at a commit this
-repo pins and consumed verbatim, so a local run and a CI run are the same bytes.
+**Deployed and run live.** Two contracts are deployed and verified on Base Sepolia
+84532 — dispute A at `0x025A2A50995485C03D0De9604133DfdaCddD9410` and dispute B at
+`0x6698DfB87Db53f63C6480559C0bDf4Fa2Ff501F2`. One live run of thirty independent
+model calls has completed against them, both disputes ran the full lifecycle, and
+both contracts now hold zero. The addresses, the thirty-call findings and all 35
+transaction hashes are below.
+
+**On PIGFOX SOLIDITY PIPELINE v1**, consumed from `lib/solidity-pipeline` at a
+commit this repo pins, so a local run and a CI run are the same bytes. Every gate
+runs. Ten of the eleven jobs are green: the gate self-test, both linters, the
+doctrine gate, the static property count, formatting, tests and invariants, the
+100% coverage gate on `src/`, the EIP-55 address-checksum gate, Slither at
+`fail-on: low`, Echidna and Medusa — the last two each registering all seven
+declared properties.
+
+**One stage is red, and it is red here too.** `forge build --sizes` fails:
+
+```
+| Properties | 25,044 | 26,084 | -468 | 23,068 |
+Error: some contracts exceed the runtime size limit (EIP-170: 24576 bytes)
+```
+
+`test/Properties.sol` is the property-fuzzing harness. EIP-170 bounds the runtime
+bytecode a chain will accept for a **deployed** contract; this harness is
+constructed in process by Echidna, by Medusa and by `forge test`, and there is no
+path by which it is deployed anywhere. So the limit does not apply to it
+substantively, while `forge build --sizes` fails the whole build on it anyway.
+The correct fix is in the pipeline rather than here — scope the size gate to
+`src/`, which is the only tree whose contents are deployed — and it is **pending**.
+This is stated rather than worked around: the harness is not shrunk to satisfy an
+inapplicable limit, no exclusion is plumbed in locally, and the stage is not
+described as passing.
+
+**It is not a CI-only failure.** `forge build --sizes` and `forge build --force
+--sizes` produce the identical 25,044 bytes on a laptop, on the same pinned
+Foundry, and `[profile.ci]` overrides only fuzz and invariant run counts, so the
+optimizer settings are shared. The stage was red before this repository had a
+remote; what publishing it changed is that the red is now visible. Its absence
+from the earlier gate summaries is how it stayed unnoticed.
 
 The off-chain panel lives in `adjudicator/` — Go, 100% covered on every package,
 `golangci-lint` clean, and it makes no vendor call and reaches no node in test.
-
-Not yet done:
-
-- **Nothing is deployed.** No address, no `deployments/` file, no broadcast. The
-  deploy script and the two seeded schedules are written and gated; the
-  deployment itself is waiting on credentials — see **Deployment** below. The
-  adjudicator renders the `cast send` argument list for every verdict and sends
-  none of them.
-- **No live model run has happened**, so this repository makes no claim about how
-  the three vendors actually behave. The drift-handling in
-  `internal/model` is written from the estate's documented experience elsewhere,
-  not from anything observed here.
 
 ## What this repo depends on
 
@@ -724,16 +746,23 @@ nothing.
 
 The pipeline's EIP-55 gate refuses a scan set of zero addresses, because that is
 the shape a broken matcher makes and it is indistinguishable from a clean tree.
-Through Unit 2 this repository pinned no addresses at all — nothing was deployed
-— so the stage could not pass, and it was **left red as a stated decision**
-rather than silenced with `--allow-empty` plumbing or a decorative address
-pinned to satisfy it.
+This gate therefore has a history here, in three stages, and it is worth keeping
+because at no point was it made to pass.
 
-It passes now, and not because anything was done to make it pass: the
-adjudicator's test fixtures carry addresses, so the gate has a real scan set to
-check. The address it checks most is `0xDD00…00DD0`, which is deliberately
-synthetic — this repository still has no deployment, and the first real address
-lands with one.
+**Through Unit 2 it was red, as a stated decision.** The repository pinned no
+addresses at all, so the scan set was empty and the stage could not pass. It was
+left red rather than silenced with `--allow-empty` plumbing or given a decorative
+address pinned to satisfy it.
+
+**Unit 3 gave it a real scan set, incidentally.** The adjudicator's test fixtures
+carry addresses, so the gate had genuine literals to check — including
+`0xDD00…00DD0`, which is deliberately synthetic. Nothing was added for the gate's
+benefit; the stage went green as a side effect of the panel's fixtures existing.
+
+**It now checks the two deployed addresses.** Dispute A and dispute B are pinned
+in this README and are real Base Sepolia 84532 deployments, so the literals the
+gate checks are the ones a reader would paste into Basescan — which is what the
+gate was for. The synthetic fixture address is still in the set alongside them.
 
 ## License
 
