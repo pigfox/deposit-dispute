@@ -8,6 +8,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Manual only, and it exists for one job: coverage-diagnostics, which is gated
+  # on this event so it never runs on a push. Everything else here runs on both
+  # of the triggers above and is unaffected by a dispatch.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -68,10 +72,20 @@ jobs:
   #
   # It runs the SAME command the gate runs, under the SAME FOUNDRY_PROFILE, so its
   # figures describe the gate rather than an approximation of it.
+  # ON DEMAND ONLY, AND BOUNDED. Both of those are corrections to how this job
+  # first shipped, and the reason is worth keeping: on every push it ran a stage
+  # that is known to exhaust the runner, so it squatted a runner for over an hour
+  # and would have kept going to GitHub's six-hour ceiling. An instrument that
+  # costs a runner-hour per push to re-confirm a known answer is not an
+  # instrument, it is a leak. It now runs only when someone asks for it, and it
+  # gives up after 30 minutes — well past the ~7 minutes the same work takes on a
+  # machine with enough memory, so a timeout here is itself a signal.
   coverage-diagnostics:
     name: coverage resource diagnostics (not a gate)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     continue-on-error: true
+    timeout-minutes: 30
     env:
       FOUNDRY_PROFILE: ci
     steps:
